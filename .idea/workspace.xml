@@ -6,6 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="d4c0308a-364f-4d4d-aba7-b1d29b1fab34" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oracle_tables.py" beforeDir="false" afterPath="$PROJECT_DIR$/oracle_tables.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/orcl_education_db.py" beforeDir="false" afterPath="$PROJECT_DIR$/orcl_education_db.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />

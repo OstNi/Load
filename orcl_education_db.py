@@ -1,11 +1,7 @@
 from setting import connect_setting_oracle, path
 from sqlalchemy import create_engine, text
 import cx_Oracle
-from dataclasses import dataclass
-
-
-cx_Oracle.init_oracle_client(lib_dir=path['LIB_DIR'],
-                             config_dir=path['CONFIG_DIR'])
+cx_Oracle.init_oracle_client(lib_dir=path['LIB_DIR'], config_dir=path['CONFIG_DIR'])
 
 ENGINE_PATH: str = (
         connect_setting_oracle['DIALECT'] + '+' +
@@ -18,18 +14,17 @@ ENGINE_PATH: str = (
 )
 
 
-# engine = create_engine(ENGINE_PATH)
-# with engine.connect() as conn:
-#     result = conn.execute(text('SELECT TOS_ID, TYPE_INFO  FROM TYPE_OF_SES'))
-#     for r in result:
-#         pass
+def get_table(sql: str, dataclass) -> dict:
+    '''
+    Получаем словарь из таблицы oracle, в которой key=id и значение это dataclass
+    sql - запрос для получения таблицы
+    dataclass - датакласс для стрк
+    '''
+    engine = create_engine(ENGINE_PATH)
+    nr_group = dict()
+    with engine.connect() as conn:
+        groups = conn.execute(text(sql))
+        for group in groups:
+            nr_group[group[0]] = dataclass(*[i for i in group[1::1]])
 
-
-
-
-
-
-
-
-
-
+    return nr_group
