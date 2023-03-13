@@ -18,7 +18,7 @@ ENGINE_PATH: str = (
 )
 
 
-engine = create_engine(ENGINE_PATH)
+# engine = create_engine(ENGINE_PATH)
 # with engine.connect() as conn:
 #     result = conn.execute(text('SELECT TOS_ID, TYPE_INFO  FROM TYPE_OF_SES'))
 #     for r in result:
