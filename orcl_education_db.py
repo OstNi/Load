@@ -18,22 +18,39 @@ ENGINE_PATH: str = (
 
 
 def get_table(table_name) -> dict:
+    """
+    по имени таблице получаем словарь, в котором pk - это ключи, а значение - dataclass с остальными
+    полями таблицы
+
+    param: table_name - имя таблицы
+    return: dict[pk] : dataclass(поля таблицы и их значения)
+    """
     out_table = dict()
     engine = create_engine(ENGINE_PATH, echo=True)
-    attr = _get_attr(table_name, engine)
-    pk_idx = _get_pk_idx(attr, engine, table_name)
-    attr = re_attr(pk_idx, attr)
-    meta = get_meta(table_name, attr)
+    attr = _get_attr(table_name, engine)  # получаем поля таблицы и их типы (int, str)
+    pk_idx = _get_pk_idx(attr, engine, table_name)  # получаем индексы элемента-pk в строке таблицы
+    attr = re_attr(pk_idx, attr)  # удаляем все pk из атрибутов, они не должны быть в dataclass
+    meta = get_meta(table_name, attr)  # получаем dataclass table_name, у которого поля - это атрибуты attr
 
     with engine.connect() as conn:
         table = conn.execute(text(f'SELECT * FROM {table_name}'))
         for item in table:
+            # т.к. pk может быть несколько в ключи словаря, мы добаляем все pk
+            # и закидываем в dataclass все остальные элементы
+
             out_table[tuple([item[i] for i in pk_idx])] = meta(*[item[i] for i in range(len(item)) if i not in pk_idx])
 
     return out_table
 
 
 def _get_pk(table_name, engine: Engine) -> list:
+    """
+    :param table_name - имя таблицы
+    :param engine - connect
+    :return: pk: list - список с pk таблицы
+    """
+
+    # запрос для нахождения pk таблицы table_name
     sql = f"SELECT ucc.COLUMN_NAME " \
           "FROM USER_CONSTRAINTS uc " \
           ",USER_CONS_COLUMNS ucc " \
@@ -52,6 +69,11 @@ def _get_pk(table_name, engine: Engine) -> list:
 
 
 def _get_attr(table_name, engine: Engine) -> list:
+    """
+    :param table_name - имя таблицы
+    :param engine - connect
+    :return attr: list - список кортежей с полем таблицы и его типом (int, str)
+    """
     attr = list()
     inspector = inspect(engine)
     columns = inspector.get_columns(f'{table_name}')
@@ -62,6 +84,10 @@ def _get_attr(table_name, engine: Engine) -> list:
 
 
 def _get_type_attr(oracle_type):
+    """
+    :param oracle_type - тип данных orcale table
+    :return тип данных python
+    """
     if re.search('NUMBER', oracle_type) or re.search('INTEGER', oracle_type):
         return int
     if re.search('VARCHAR', oracle_type):
@@ -70,11 +96,22 @@ def _get_type_attr(oracle_type):
 
 
 def get_meta(name, attr):
+    """
+    :param name - имя создаваемого dataclass
+    :param attr - список полей класса
+    :return dataclass name с полями attr
+    """
     return make_dataclass(str(name), attr)
 
 
 def _get_pk_idx(attr: list[tuple], engine: Engine, table_name) -> list:
-    pk = _get_pk(table_name, engine)
+    """
+    :param attr - список полей таблицы
+    :param engine - connect
+    :param table_name - имя таблицы
+    :return pk_idx: list - список с индексами элементов-pk таблицы
+    """
+    pk = _get_pk(table_name, engine)  # ищем pk
     pk_idx = list()
     for idx, key in enumerate(attr):
         if key[0] in pk:
@@ -84,6 +121,13 @@ def _get_pk_idx(attr: list[tuple], engine: Engine, table_name) -> list:
 
 
 def re_attr(pk_idx: list, attr: list) -> list:
+    """
+    Удаляем из attr все атрибуты, которые являются pk таблицы
+    Они не нужны при создании dataclass
+
+    :param pk_idx - список с индексами pk таблицы
+    :param attr - атрибуты таблицы
+    """
     for idx in pk_idx:
         attr.pop(idx)
 
