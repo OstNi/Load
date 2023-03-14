@@ -4,12 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d4c0308a-364f-4d4d-aba7-b1d29b1fab34" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/oracle_tables.py" beforeDir="false" afterPath="$PROJECT_DIR$/oracle_tables.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/orcl_education_db.py" beforeDir="false" afterPath="$PROJECT_DIR$/orcl_education_db.py" afterDir="false" />
-    </list>
+    <list default="true" id="d4c0308a-364f-4d4d-aba7-b1d29b1fab34" name="Changes" comment="+venv" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -41,6 +36,18 @@
       <option name="presentableId" value="Default" />
       <updated>1678702249694</updated>
     </task>
+    <task id="LOCAL-00001" summary="+venv">
+      <created>1678713012546</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1678713012546</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="+venv" />
+    <option name="LAST_COMMIT_MESSAGE" value="+venv" />
   </component>
 </project>
