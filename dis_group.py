@@ -1,5 +1,6 @@
 # Подготовка данных для выгрузки со стороны DIS_GROUP
 from oracle_table import get_table
+from time import time
 
 
 def get_dis_groups() -> dict:
@@ -36,7 +37,13 @@ def get_dis_stadies() -> dict:
 
 
 if __name__ == '__main__':
+
+    start = time()
     dis_studies = get_dis_stadies()
+    end = time()
+    print(f'dis_studies time: {round((end - start), 2)} sec | count: {len(dis_studies)}')
+
+    start = time()
     dis_groups = get_dis_groups()
-    print(len(dis_studies))
-    print(len(dis_groups))
+    end = time()
+    print(f'dis_groups time: {round((end - start), 2)} sec | count: {len(dis_groups)}')
