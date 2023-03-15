@@ -1,5 +1,5 @@
 from setting import connect_setting_oracle, path
-from sqlalchemy import create_engine, text, inspect, Engine, MetaData, Table
+from sqlalchemy import create_engine, text, inspect, Engine
 from dataclasses import make_dataclass
 import cx_Oracle
 import re
@@ -17,23 +17,26 @@ ENGINE_PATH: str = (
 )
 
 
-def get_table(table_name) -> dict:
+def get_table(table_name: str, where: str = None) -> dict:
     """
     по имени таблице получаем словарь, в котором pk - это ключи, а значение - dataclass с остальными
     полями таблицы
 
-    param: table_name - имя таблицы
-    return: dict[pk] : dataclass(поля таблицы и их значения)
+    запрос для редактирования: SELECT table_aliace.* FROM {table_name} table_aliace {where if where else ""}
+
+    :param table_name: имя таблицы
+    :param where: условие для фильтрации таблицы: алиас таблицы table_name - table_aliace
+    :return: dict[pk] : dataclass(поля таблицы и их значения)
     """
     out_table = dict()
     engine = create_engine(ENGINE_PATH, echo=True)
     attr = _get_attr(table_name, engine)  # получаем поля таблицы и их типы (int, str)
     pk_idx = _get_pk_idx(attr, engine, table_name)  # получаем индексы элемента-pk в строке таблицы
-    attr = re_attr(pk_idx, attr)  # удаляем все pk из атрибутов, они не должны быть в dataclass
-    meta = get_meta(table_name, attr)  # получаем dataclass table_name, у которого поля - это атрибуты attr
+    attr = _re_attr(pk_idx, attr)  # удаляем все pk из атрибутов, они не должны быть в dataclass
+    meta = _get_meta(table_name, attr)  # получаем dataclass table_name, у которого поля - это атрибуты attr
 
     with engine.connect() as conn:
-        table = conn.execute(text(f'SELECT * FROM {table_name}'))
+        table = conn.execute(text(f'SELECT table_aliace.* FROM {table_name} table_aliace {where if where else ""}'))
         for item in table:
             # т.к. pk может быть несколько в ключи словаря, мы добаляем все pk
             # и закидываем в dataclass все остальные элементы
@@ -95,7 +98,7 @@ def _get_type_attr(oracle_type):
     return str
 
 
-def get_meta(name, attr):
+def _get_meta(name, attr):
     """
     :param name - имя создаваемого dataclass
     :param attr - список полей класса
@@ -120,7 +123,7 @@ def _get_pk_idx(attr: list[tuple], engine: Engine, table_name) -> list:
     return pk_idx
 
 
-def re_attr(pk_idx: list, attr: list) -> list:
+def _re_attr(pk_idx: list, attr: list) -> list:
     """
     Удаляем из attr все атрибуты, которые являются pk таблицы
     Они не нужны при создании dataclass
