@@ -4,8 +4,9 @@ from oracle_table import get_table
 
 def get_dis_groups() -> dict:
     """
-    DIS_GROUPS которые входят в 2022 год, т.е. начинаются не позже конца 2022
-    :return:
+    DIS_GROUPS которые входят в 2022 год, т.е.
+    начинаются не позже конца 2022 и кончаются не раньше начала 2022
+    :return: dict[dgr_id] = dataclass(поле таблицы: значение)
     """
 
     where = ',DGR_PERIODS dp ' \
