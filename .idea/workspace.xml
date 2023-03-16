@@ -4,7 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d4c0308a-364f-4d4d-aba7-b1d29b1fab34" name="Changes" comment="get_dis_groups + comment" />
+    <list default="true" id="d4c0308a-364f-4d4d-aba7-b1d29b1fab34" name="Changes" comment="+ time_test">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -77,14 +79,22 @@
       <option name="project" value="LOCAL" />
       <updated>1678886104801</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="+ time_test">
+      <created>1678886352713</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1678886352713</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="+venv" />
     <MESSAGE value="+ dis_studies&#10;+ dis_group" />
     <MESSAGE value="get_dis_groups + comment" />
-    <option name="LAST_COMMIT_MESSAGE" value="get_dis_groups + comment" />
+    <MESSAGE value="+ time_test" />
+    <option name="LAST_COMMIT_MESSAGE" value="+ time_test" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
