@@ -25,7 +25,7 @@ def get_table(table_name: str, where: str = None) -> dict:
     запрос для редактирования: SELECT table_aliace.* FROM {table_name} table_aliace {where if where else ""}
 
     :param table_name: имя таблицы
-    :param where: условие для фильтрации таблицы: алиас таблицы table_name - table_aliace
+    :param where: условие для фильтрации таблицы: алиас таблицы TABLE_NAME всегда 'table_aliace'
     :return: dict[pk] : dataclass(поля таблицы и их значения)
     """
     out_table = dict()

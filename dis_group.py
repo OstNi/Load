@@ -50,6 +50,8 @@ def get_teach_prog(tp_id: int) -> dict:
     return get_table('TEACH_PROGRAMS', where)
 
 
+
+
 def get_discipline(dis_id: int) -> dict:
     """
     Все DISCIPLINES по dis_id
@@ -87,6 +89,7 @@ def get_tpdl_for_fac(fcr_id: int) -> int:
 
     return fac_req[(fcr_id,)].tpdl_tpdl_id
 
+
 def get_dis_students(dgr_id: int) -> dict:
     pass
 
@@ -99,7 +102,7 @@ def type_of_study(study: type):
     if study.tpdl_tpdl_id:
         return 'электив'
     if study.fcr_fcr_id:
-        study.tpdl_id = get_tpdl_for_fac(study.fcr_fcr_id)
+        get_tpdl_for_fac(study.fcr_fcr_id)
         return 'факультатив'
     else:
         return 'дисциплина по выбору'

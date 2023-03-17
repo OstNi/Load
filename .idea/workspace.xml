@@ -4,8 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d4c0308a-364f-4d4d-aba7-b1d29b1fab34" name="Changes" comment="+ time_test">
+    <list default="true" id="d4c0308a-364f-4d4d-aba7-b1d29b1fab34" name="Changes" comment="+ add def to dis_groups">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/dis_group.py" beforeDir="false" afterPath="$PROJECT_DIR$/dis_group.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oracle_table.py" beforeDir="false" afterPath="$PROJECT_DIR$/oracle_table.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/venv/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/venv/.gitignore" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -42,6 +45,12 @@
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;
   }
 }</component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/venv" />
+      <recent name="$PROJECT_DIR$" />
+    </key>
+  </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
@@ -86,7 +95,14 @@
       <option name="project" value="LOCAL" />
       <updated>1678886352713</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="+ add def to dis_groups">
+      <created>1678987600930</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1678987600931</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -94,7 +110,8 @@
     <MESSAGE value="+ dis_studies&#10;+ dis_group" />
     <MESSAGE value="get_dis_groups + comment" />
     <MESSAGE value="+ time_test" />
-    <option name="LAST_COMMIT_MESSAGE" value="+ time_test" />
+    <MESSAGE value="+ add def to dis_groups" />
+    <option name="LAST_COMMIT_MESSAGE" value="+ add def to dis_groups" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
