@@ -17,6 +17,21 @@ ENGINE_PATH: str = (
 )
 
 
+def create_sql_table(table_name: str, where: str) -> dict:
+    out_table = dict()
+    engine = create_engine(ENGINE_PATH, echo=True)
+    attr = _get_attr(table_name, engine)  # получаем поля таблицы и их типы (int, str)
+    meta = _get_meta(table_name, attr)  # получаем dataclass table_name, у которого поля - это атрибуты attr
+    with engine.connect() as conn:
+        table = conn.execute(text(f'SELECT table_aliace.* FROM {table_name} table_aliace {where if where else ""}'))
+        idx: int = 0
+        for item in table:
+            out_table[idx] = meta(*[i for i in item])
+            idx += 1
+
+    return out_table
+
+
 def get_table(table_name: str, where: str = None) -> dict:
     """
     по имени таблице получаем словарь, в котором pk - это ключи, а значение - dataclass с остальными

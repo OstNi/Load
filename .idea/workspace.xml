@@ -4,11 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d4c0308a-364f-4d4d-aba7-b1d29b1fab34" name="Changes" comment="+ add def to dis_groups">
+    <list default="true" id="d4c0308a-364f-4d4d-aba7-b1d29b1fab34" name="Changes" comment="+ gitignore">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/dis_group.py" beforeDir="false" afterPath="$PROJECT_DIR$/dis_group.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/oracle_table.py" beforeDir="false" afterPath="$PROJECT_DIR$/oracle_table.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/venv/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/venv/.gitignore" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -102,7 +101,21 @@
       <option name="project" value="LOCAL" />
       <updated>1678987600931</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="+ gitignore">
+      <created>1679050690094</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1679050690094</updated>
+    </task>
+    <task id="LOCAL-00008" summary="+ gitignore">
+      <created>1679050850113</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1679050850113</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -111,7 +124,8 @@
     <MESSAGE value="get_dis_groups + comment" />
     <MESSAGE value="+ time_test" />
     <MESSAGE value="+ add def to dis_groups" />
-    <option name="LAST_COMMIT_MESSAGE" value="+ add def to dis_groups" />
+    <MESSAGE value="+ gitignore" />
+    <option name="LAST_COMMIT_MESSAGE" value="+ gitignore" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -123,7 +137,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/oracle_table.py</url>
-          <line>39</line>
+          <line>54</line>
           <option name="timeStamp" value="7" />
         </line-breakpoint>
       </breakpoints>
