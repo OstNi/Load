@@ -1,6 +1,23 @@
 # Подготовка данных для выгрузки со стороны DIS_GROUP
-from oracle_table import get_table
+from oracle_table import get_table, create_sql_table
 from time import time
+import logging
+import logging.handlers
+
+# логирование
+def _init_logger(name):
+    logger = logging.getLogger(name)
+    foramat = '%(asctime)s :: %(name)s:%(lineno)s :: %(levelname)s :: %(message)s'
+    logger.setLevel(logging.DEBUG)
+    sh = logging.StreamHandler()
+    sh.setFormatter(logging.Formatter(foramat))
+    sh.setLevel(logging.DEBUG)
+    fh = logging.handlers.RotatingFileHandler(filename='logs/test.log', maxBytes=125000, backupCount=1)
+    fh.setFormatter(logging.Formatter(foramat))
+    fh.setLevel(logging.DEBUG)
+    logger.addHandler(sh)
+    logger.addHandler(fh)
+    logger.debug('logger was initialized')
 
 
 def get_dis_groups() -> dict:
@@ -50,8 +67,6 @@ def get_teach_prog(tp_id: int) -> dict:
     return get_table('TEACH_PROGRAMS', where)
 
 
-
-
 def get_discipline(dis_id: int) -> dict:
     """
     Все DISCIPLINES по dis_id
@@ -62,7 +77,28 @@ def get_discipline(dis_id: int) -> dict:
     return get_table('DISCIPLINES', where)
 
 
-def get_dis_stadies() -> dict:
+def get_pr_id(dgr_id: int) -> list:
+    """
+    :param dgr_id: id группы
+    :return: список pr_id всех студентов группы
+    """
+    where = 'join dgr_periods dgp_start ' \
+            'on(table_aliace.dgp_start_id=dgp_start.dgp_id) ' \
+            'join dis_groups dgr ' \
+            'on(table_aliace.dgr_dgr_id=dgr.dgr_id) ' \
+            'join dgr_periods dgp_stop ' \
+            'on(coalesce(table_aliace.dgp_stop_id,dgr.dgp_stop_id)=dgp_stop.dgp_id) ' \
+            f'where dgr.DGR_ID = {dgr_id} '
+
+    dgr_students = get_table('DGR_STUDENTS', where)
+    pr_list = []
+    for i in dgr_students.keys():
+        pr_list.append(dgr_students[i].pr_pr_id)
+
+    return pr_list
+
+
+def get_dis_studies() -> dict:
     """
     DIS_STUDIES на 2022 учебный период
     :return: DIS_STUDIES: dict[dds_id] = dataclass(поле таблицы: значение)
@@ -90,10 +126,6 @@ def get_tpdl_for_fac(fcr_id: int) -> int:
     return fac_req[(fcr_id,)].tpdl_tpdl_id
 
 
-def get_dis_students(dgr_id: int) -> dict:
-    pass
-
-
 def type_of_study(study: type):
     """
     :param study: - dataclass по ключу dss_id словаря  dis_studies
@@ -102,7 +134,6 @@ def type_of_study(study: type):
     if study.tpdl_tpdl_id:
         return 'электив'
     if study.fcr_fcr_id:
-        get_tpdl_for_fac(study.fcr_fcr_id)
         return 'факультатив'
     else:
         return 'дисциплина по выбору'
@@ -118,14 +149,22 @@ def type_of_work(dgr_id: int) -> dict:
     return get_table('TYPE_OF_WORKS', where)
 
 
+def tpdl_check(table: dict) -> int:
+    tpdl = set()
+    for i in table:
+        tpdl.add(table[i].tpdl_tpdl_id)
+
+    if len(tpdl) == 1:
+        return tpdl[0]
+    else:
+        logger.debug(f'{table} имеет несколько tpdl: {[i for i in tpdl]}')
+
+
 if __name__ == '__main__':
+    _init_logger('load')
+    logger = logging.getLogger('load.main')
 
-    start = time()
-    dis_studies = get_dis_stadies()
-    end = time()
-    print(f'dis_studies time: {round((end - start), 2)} sec | count: {len(dis_studies)}')
-
-    start = time()
-    dis_groups = get_dis_groups()
-    end = time()
-    print(f'dis_groups time: {round((end - start), 2)} sec | count: {len(dis_groups)}')
+    # dis_studies = get_dis_studies()
+    # dis_groups = get_dis_groups()
+    pr_list = get_pr_id(229)
+    print(*pr_list)
