@@ -17,13 +17,13 @@ ENGINE_PATH: str = (
 )
 
 
-def create_sql_table(table_name: str, where: str) -> dict:
+def create_sql_table(table_name: str, select: str = None, where: str = None, add_fields: list[tuple] = None) -> dict:
     out_table = dict()
     engine = create_engine(ENGINE_PATH, echo=True)
-    attr = _get_attr(table_name, engine)  # получаем поля таблицы и их типы (int, str)
+    attr = _get_attr(table_name, engine, add_fields)  # получаем поля таблицы и их типы (int, str)
     meta = _get_meta(table_name, attr)  # получаем dataclass table_name, у которого поля - это атрибуты attr
     with engine.connect() as conn:
-        table = conn.execute(text(f'SELECT table_aliace.* FROM {table_name} table_aliace {where if where else ""}'))
+        table = conn.execute(text(f'SELECT {select if select else "table_aliace.*"} FROM {table_name} table_aliace {where if where else ""}'))
         idx: int = 0
         for item in table:
             out_table[idx] = meta(*[i for i in item])
@@ -32,7 +32,7 @@ def create_sql_table(table_name: str, where: str) -> dict:
     return out_table
 
 
-def get_table(table_name: str, where: str = None) -> dict:
+def get_table(table_name: str, select: str = None, where: str = None, add_fields: list[tuple] = None) -> dict:
     """
     по имени таблице получаем словарь, в котором pk - это ключи, а значение - dataclass с остальными
     полями таблицы
@@ -45,13 +45,13 @@ def get_table(table_name: str, where: str = None) -> dict:
     """
     out_table = dict()
     engine = create_engine(ENGINE_PATH, echo=True)
-    attr = _get_attr(table_name, engine)  # получаем поля таблицы и их типы (int, str)
+    attr = _get_attr(table_name, engine, add_fields)  # получаем поля таблицы и их типы (int, str)
     pk_idx = _get_pk_idx(attr, engine, table_name)  # получаем индексы элемента-pk в строке таблицы
     attr = _re_attr(pk_idx, attr)  # удаляем все pk из атрибутов, они не должны быть в dataclass
     meta = _get_meta(table_name, attr)  # получаем dataclass table_name, у которого поля - это атрибуты attr
 
     with engine.connect() as conn:
-        table = conn.execute(text(f'SELECT table_aliace.* FROM {table_name} table_aliace {where if where else ""}'))
+        table = conn.execute(text(f'SELECT {select if select else "table_aliace.*"} FROM {table_name} table_aliace {where if where else ""}'))
         for item in table:
             # т.к. pk может быть несколько в ключи словаря, мы добаляем все pk
             # и закидываем в dataclass все остальные элементы
@@ -86,15 +86,19 @@ def _get_pk(table_name, engine: Engine) -> list:
     return pk
 
 
-def _get_attr(table_name, engine: Engine) -> list:
+def _get_attr(table_name, engine: Engine, add_fields: list[tuple] = None) -> list:
     """
     :param table_name - имя таблицы
     :param engine - connect
+    :param: add_fields - дополнительные поля таблицы
     :return attr: list - список кортежей с полем таблицы и его типом (int, str)
     """
     attr = list()
     inspector = inspect(engine)
     columns = inspector.get_columns(f'{table_name}')
+    if add_fields:
+        attr += add_fields
+
     for column in columns:
         attr.append((column['name'], _get_type_attr(str(column['type']))))
 
