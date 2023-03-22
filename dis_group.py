@@ -83,14 +83,7 @@ def get_pr_id(dgr_id: int) -> list:
     :param dgr_id: id группы
     :return: список pr_id всех студентов группы
     """
-    where = 'join dgr_periods dgp_start ' \
-            'on(table_aliace.dgp_start_id=dgp_start.dgp_id) ' \
-            'join dis_groups dgr ' \
-            'on(table_aliace.dgr_dgr_id=dgr.dgr_id) ' \
-            'join dgr_periods dgp_stop ' \
-            'on(coalesce(table_aliace.dgp_stop_id,dgr.dgp_stop_id)=dgp_stop.dgp_id) ' \
-            f'where dgr.DGR_ID = {dgr_id} '
-
+    where = f' WHERE dgr_dgr_id = {dgr_id}'
     dgr_students = get_table('DGR_STUDENTS', where=where)
     pr_list = []
     for i in dgr_students.keys():
@@ -99,24 +92,66 @@ def get_pr_id(dgr_id: int) -> list:
     return pr_list
 
 
-def get_current_term(pr_list: list):
+def _get_teach_plan_id(pr_id: int) -> int:
     """
     :param pr_list: список id личных дел студентов
     :return: dict с текущими триместрами студентов
     """
     select = " DEK.CURRENT_TFS(pr_id), table_aliace.* "
-    where = f" WHERE PR_ID IN ({' ,'.join(list(map(str, pr_list)))}) "
+    where = f" WHERE PR_ID = {pr_id} "
     add_field = [('cur_tfs', int)]
 
     tfs_dict = create_sql_table('PERSONAL_RECORDS', select=select, where=where, add_fields=add_field)
 
-    cur_tfs = []
-    for key in tfs_dict:
-        cur_tfs.append(tfs_dict[key].cur_tfs)
+    tfs_id = tfs_dict[list(tfs_dict.keys())[0]].cur_tfs
 
-    where = f" WHERE tfs_id in ({' ,'.join(map(str,cur_tfs))})"
+    where = f' WHERE tfs_id = {tfs_id}'
+    return create_sql_table(table_name='TP_FOR_STUDENTS', where=where)[0].tpl_tp_id
 
-    return get_table('TP_FOR_STUDENTS', where=where)
+
+def _get_type_of_edu_periods(teach_plan: int) -> int:
+    """
+    :param teach_plan: id учебного плана
+    :return: тип учебного периода
+    """
+    where = f' WHERE tp_id = {teach_plan}'
+    return create_sql_table(table_name='teach_plans', where=where)[0].tedp_tedp_id
+
+
+def _get_params(pr_id: int, dis_id: int) -> list[int]:
+    """
+    :param pr_id: id личного дела студента
+    :param dis_id: id дисциплины
+    :return: параметры для dGS_TERMS [start_crs, start_typ_id, stop_typ_id, tedp_id]
+    """
+    tp_id = _get_teach_plan_id(pr_id)
+
+    add_attr = [
+        ('start_typ_id', int),
+        ('stop_typ_id', int),
+    ]
+
+    select = ' dgp_start.typ_typ_id, dgp_stop.typ_typ_id, table_aliace.* '
+    where = 'join dgr_periods dgp_start ' \
+            'on(table_aliace.dgp_start_id=dgp_start.dgp_id) ' \
+            'join dis_groups dgr ' \
+            'on(table_aliace.dgr_dgr_id=dgr.dgr_id) ' \
+            'join dgr_periods dgp_stop ' \
+            'on(coalesce(table_aliace.dgp_stop_id, dgr.dgp_stop_id)=dgp_stop.dgp_id) ' \
+            'JOIN DIS_STUDIES ds '\
+            'on(dgr.DSS_DSS_ID = ds.DSS_ID) '\
+            'JOIN DISCIPLINES d '\
+            'ON(ds.DIS_DIS_ID = d.DIS_ID) '\
+            f'where table_aliace.pr_pr_id={pr_id} and d.dis_id = {dis_id}'
+
+    #создаем таблицу с параметрами
+    param_table = create_sql_table(table_name='dgr_students', select=select, where=where, add_fields=add_attr)
+    start_typ_id = param_table[0].start_typ_id
+    stop_typ_id = param_table[0].stop_typ_id
+    start_crs = param_table[0].start_crs
+    tedp_id = _get_type_of_edu_periods(tp_id)
+
+    return [start_crs, start_typ_id, stop_typ_id, tedp_id]
 
 
 def get_dis_studies(dss_id: int) -> dict:
@@ -166,7 +201,7 @@ def type_of_work(dgr_id: int) -> dict:
             'SELECT * ' \
             'FROM DGR_WORKS dw ' \
             f'WHERE dw.DGR_DGR_ID = {dgr_id} ' \
-            'AND dw.TOW_TOW_ID  = tow.TOW_ID )'
+            'AND dw.TOW_TOW_ID  = table_aliace.TOW_ID )'
 
     return get_table('TYPE_OF_WORKS', where=where)
 
@@ -179,21 +214,26 @@ if __name__ == '__main__':
     dis_groups = get_dis_groups()   # выгружаем дис группы
     for key in dis_groups:
         dis_studies = get_dis_studies(dis_groups[key].dss_dss_id)   # получаем dis_studies, которую они посещают
-        dds_id: int = list(dis_studies.keys())[0]
+        dds_id = list(dis_studies.keys())[0]
+
+        if dis_studies[dds_id].foe_foe_id != 1:     # если это не очная форма обучения, пропускаем
+            continue
+
         study_type = type_of_study(dis_studies[dds_id])     # узнаем тип дисциплины
+        work_type = type_of_work(key[0])   # узнаем тип работ группы
 
         # ветка электива
         if study_type == 'эл':
             # дергаем чаптер через схему доставки напрямую
             chapter = get_tpd_from_tpdl(dis_studies[dds_id].tpdl_tpdl_id)
 
-        # вктка факультатива
+        # ветка факультатива
         if study_type == 'фак':
             # через FACULTATIVE_REQUESTS выходим на схему доставки и дергаем чаптер
             chapter = get_tpd_from_tpdl(get_tpdl_for_fac(dis_studies[dds_id].fcr_fcr_id))
 
         # ветка дисциплины по выбору
         if study_type == 'дпв':
-            pr_list = get_pr_id(key)    # получаем личные дела студентов в группе с id = key
-            cur_term = get_current_term(pr_list)    # узнаем текущий триместр студентов
+            pr_list = get_pr_id(key[0])    # получаем личные дела студентов в группе с id = key
+
 
