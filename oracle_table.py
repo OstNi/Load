@@ -17,6 +17,21 @@ ENGINE_PATH: str = (
 )
 
 
+def procedure(procedure_name: str, params: list = None):
+
+    with cx_Oracle.connect(
+            user=connect_setting_oracle['USERNAME'],
+            password=connect_setting_oracle['PASSWORD'],
+            dsn= connect_setting_oracle['DSN']
+    ) as conn:
+
+        cursor = conn.cursor()
+        cursor.callproc(procedure_name, 1, 20202, 20203, 2)
+        result = cursor.fetchone()
+
+    return result
+
+
 def create_sql_table(table_name: str, select: str = None, where: str = None, add_fields: list[tuple] = None) -> dict:
     out_table = dict()
     engine = create_engine(ENGINE_PATH, echo=True)

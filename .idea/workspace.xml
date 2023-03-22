@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d4c0308a-364f-4d4d-aba7-b1d29b1fab34" name="Changes" comment="+ create_sql_table - генерация словаря с сурогатными ключами">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-    </list>
+    <list default="true" id="d4c0308a-364f-4d4d-aba7-b1d29b1fab34" name="Changes" comment="+ select and add_fields" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -127,7 +125,21 @@
       <option name="project" value="LOCAL" />
       <updated>1679056151537</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="+ начало реализации логики выгрузки">
+      <created>1679400958379</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1679400958379</updated>
+    </task>
+    <task id="LOCAL-00012" summary="+ select and add_fields">
+      <created>1679401010339</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1679401010339</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -139,7 +151,9 @@
     <MESSAGE value="+ gitignore" />
     <MESSAGE value="+ logger &#10;+ get_pr_id" />
     <MESSAGE value="+ create_sql_table - генерация словаря с сурогатными ключами" />
-    <option name="LAST_COMMIT_MESSAGE" value="+ create_sql_table - генерация словаря с сурогатными ключами" />
+    <MESSAGE value="+ начало реализации логики выгрузки" />
+    <MESSAGE value="+ select and add_fields" />
+    <option name="LAST_COMMIT_MESSAGE" value="+ select and add_fields" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
