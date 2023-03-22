@@ -26,7 +26,7 @@ def procedure(procedure_name: str, params: list = None):
     ) as conn:
 
         cursor = conn.cursor()
-        cursor.callproc(procedure_name, 1, 20202, 20203, 2)
+        cursor.callproc(procedure_name, params)
         result = cursor.fetchone()
 
     return result
