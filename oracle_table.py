@@ -17,22 +17,49 @@ ENGINE_PATH: str = (
 )
 
 
-def procedure(procedure_name: str, params: list = None):
+def procedure(procedure_name: str, args: dict = None, out_args: list[str] = None) -> list:
+    """
+    Вызов pl/sql процедуру
+    :param procedure_name:  имя процедуры
+    :param args:  словарь с аргуметами и их значенями
+    :param out_args:  список с именами OUT-аргументов
+    :return: значения OUT агруметов
+    """
 
     with cx_Oracle.connect(
             user=connect_setting_oracle['USERNAME'],
             password=connect_setting_oracle['PASSWORD'],
-            dsn= connect_setting_oracle['DSN']
+            dsn=connect_setting_oracle['DSN']
     ) as conn:
-
         cursor = conn.cursor()
-        cursor.callproc(procedure_name, params)
-        result = cursor.fetchone()
+        args_list = list(args.values())
+        result = cursor.callproc(procedure_name, args_list)
 
-    return result
+    idx = 0
+    for key in args:
+        args[key] = result[idx]
+        idx += 1
+
+    out: list[int] = []
+    for key in out_args:
+        out.append(args[key])
+
+    return out
 
 
 def create_sql_table(table_name: str, select: str = None, where: str = None, add_fields: list[tuple] = None) -> dict:
+    """
+    Создает словарь с суррогатными ключами и в значение уходят все поля таблицы
+
+    Базовый запрос: SELECT {select if select else "table_aliace.*"} FROM {table_name} table_aliace {where if where else ""}
+
+    :param table_name:  имя таблицы
+    :param select:  select-зона в запросе
+    :param where:  where-зона в запросе
+    :param add_fields:  дополнительные поля, если в select-зоне явно указаны ещё другие поля
+    :return:  dict[0..n] : dataclass(поля таблицы и их значения)
+    """
+
     out_table = dict()
     engine = create_engine(ENGINE_PATH, echo=True)
     attr = _get_attr(table_name, engine, add_fields)  # получаем поля таблицы и их типы (int, str)
@@ -52,8 +79,10 @@ def get_table(table_name: str, select: str = None, where: str = None, add_fields
     по имени таблице получаем словарь, в котором pk - это ключи, а значение - dataclass с остальными
     полями таблицы
 
-    запрос для редактирования: SELECT table_aliace.* FROM {table_name} table_aliace {where if where else ""}
+    Базовый запрос: SELECT {select if select else "table_aliace.*"} FROM {table_name} table_aliace {where if where else ""}
 
+    :param select:  select-зона в запросе
+    :param add_fields:  дополнительные поля, если в select-зоне явно указаны ещё другие поля
     :param table_name: имя таблицы
     :param where: условие для фильтрации таблицы: алиас таблицы TABLE_NAME всегда 'table_aliace'
     :return: dict[pk] : dataclass(поля таблицы и их значения)
@@ -78,9 +107,9 @@ def get_table(table_name: str, select: str = None, where: str = None, add_fields
 
 def _get_pk(table_name, engine: Engine) -> list:
     """
-    :param table_name - имя таблицы
-    :param engine - connect
-    :return: pk: list - список с pk таблицы
+    :param table_name  имя таблицы
+    :param engine  connect
+    :return: pk: list  список с pk таблицы
     """
 
     # запрос для нахождения pk таблицы table_name
@@ -103,10 +132,10 @@ def _get_pk(table_name, engine: Engine) -> list:
 
 def _get_attr(table_name, engine: Engine, add_fields: list[tuple] = None) -> list:
     """
-    :param table_name - имя таблицы
-    :param engine - connect
-    :param: add_fields - дополнительные поля таблицы
-    :return attr: list - список кортежей с полем таблицы и его типом (int, str)
+    :param table_name  имя таблицы
+    :param engine  connect
+    :param: add_fields: дополнительные поля таблицы
+    :return attr: список кортежей с полем таблицы и его типом (int, str)
     """
     attr = list()
     inspector = inspect(engine)
@@ -122,8 +151,8 @@ def _get_attr(table_name, engine: Engine, add_fields: list[tuple] = None) -> lis
 
 def _get_type_attr(oracle_type):
     """
-    :param oracle_type - тип данных orcale table
-    :return тип данных python
+    :param oracle_type: тип данных oracle
+    :return: типа данных python
     """
     if re.search('NUMBER', oracle_type) or re.search('INTEGER', oracle_type):
         return int
@@ -134,19 +163,19 @@ def _get_type_attr(oracle_type):
 
 def _get_meta(name, attr):
     """
-    :param name - имя создаваемого dataclass
-    :param attr - список полей класса
-    :return dataclass name с полями attr
+    :param name: имя создаваемого dataclass
+    :param attr: список полей класса
+    :return: dataclass name с полями attr
     """
     return make_dataclass(str(name), attr)
 
 
 def _get_pk_idx(attr: list[tuple], engine: Engine, table_name) -> list:
     """
-    :param attr - список полей таблицы
-    :param engine - connect
-    :param table_name - имя таблицы
-    :return pk_idx: list - список с индексами элементов-pk таблицы
+    :param attr: список полей таблицы
+    :param engine:  connect
+    :param table_name:  имя таблицы
+    :return: pk_idx: список с индексами элементов-pk таблицы
     """
     pk = _get_pk(table_name, engine)  # ищем pk
     pk_idx = list()
@@ -162,8 +191,9 @@ def _re_attr(pk_idx: list, attr: list) -> list:
     Удаляем из attr все атрибуты, которые являются pk таблицы
     Они не нужны при создании dataclass
 
-    :param pk_idx - список с индексами pk таблицы
-    :param attr - атрибуты таблицы
+    :param pk_idx: список с индексами pk таблицы
+    :param attr: атрибуты таблицы
+    :return: список атрибуттов без pk
     """
     for idx in pk_idx:
         attr.pop(idx)
