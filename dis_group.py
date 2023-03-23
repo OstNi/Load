@@ -1,25 +1,14 @@
 # Подготовка данных для выгрузки со стороны DIS_GROUP
-from oracle_table import get_table, create_sql_table
-from time import time
+from oracle_table import get_table, create_sql_table, procedure
+from log import _init_logger
 import logging
-import logging.handlers
+
+# инициализируем лог
+_init_logger('load')
+logger = logging.getLogger('load.main')
 
 
 # логирование
-def _init_logger(name):
-    logger = logging.getLogger(name)
-    format = '%(asctime)s :: %(name)s:%(lineno)s :: %(levelname)s :: %(message)s'
-    logger.setLevel(logging.DEBUG)
-    sh = logging.StreamHandler()
-    sh.setFormatter(logging.Formatter(format))
-    sh.setLevel(logging.DEBUG)
-    fh = logging.handlers.RotatingFileHandler(filename='logs/test.log', maxBytes=125000, backupCount=1)
-    fh.setFormatter(logging.Formatter(format))
-    fh.setLevel(logging.DEBUG)
-    logger.addHandler(sh)
-    logger.addHandler(fh)
-    logger.debug('logger was initialized')
-
 
 def get_dis_groups() -> dict:
     """
@@ -41,7 +30,7 @@ def get_dis_groups() -> dict:
 def get_tpd_from_tpdl(tpdl_id: int) -> dict:
     """
     Все TPD_CHHAPTERS с конкретной tpdl_id
-    :param tpdl_id:
+    :param tpdl_id: id схемы доставки
     :return: TPD_CHAPTERS: dict[tc_id] = dataclass(поле таблицы: значение)
     """
     where = f' WHERE table_aliace.tpdl_tp_dl_id = {tpdl_id}'
@@ -51,8 +40,8 @@ def get_tpd_from_tpdl(tpdl_id: int) -> dict:
 def get_tc_time(tc_id: int) -> dict:
     """
     Все TC_TIME по tc_id
-    :param tc_id:
-    :return: TIME_OF_TPD_CHAPTERS: dict[tc_id] = dataclass(поле таблицы: значение)
+    :param tc_id: id времени учебного раздела
+    :return: TIME_OF_TPD_CHAPTERS: dict[tc_id] : dataclass(поле таблицы: значение)
     """
     where = f'WHERE table_aliace.tc_tc_id = {tc_id}'
     return get_table('TIME_OF_TPD_CHAPTERS', where=where)
@@ -66,16 +55,6 @@ def get_teach_prog(tp_id: int) -> dict:
     """
     where = f'WHERE table_aliace.tp_id = {tp_id}'
     return get_table('TEACH_PROGRAMS', where=where)
-
-
-def get_discipline(dis_id: int) -> dict:
-    """
-    Все DISCIPLINES по dis_id
-    :param dis_id:
-    :return: DISCIPLINES: dict[dis] = dataclass(поле таблицы: значение)
-    """
-    where = f' WHERE table_aliace.dis_id = {dis_id}'
-    return get_table('DISCIPLINES', where=where)
 
 
 def get_pr_id(dgr_id: int) -> list:
@@ -94,8 +73,8 @@ def get_pr_id(dgr_id: int) -> list:
 
 def _get_teach_plan_id(pr_id: int) -> int:
     """
-    :param pr_list: список id личных дел студентов
-    :return: dict с текущими триместрами студентов
+    :param pr_id: id личного дела студента
+    :return: id учебного плана студента
     """
     select = " DEK.CURRENT_TFS(pr_id), table_aliace.* "
     where = f" WHERE PR_ID = {pr_id} "
@@ -118,11 +97,12 @@ def _get_type_of_edu_periods(teach_plan: int) -> int:
     return create_sql_table(table_name='teach_plans', where=where)[0].tedp_tedp_id
 
 
-def _get_params(pr_id: int, dis_id: int) -> list[int]:
+def _get_args(pr_id: int, dis_id: int) -> tuple[dict, list[str]]:
     """
+    Расчет параметров для процедуры 'dgr_utl.dGS_TERMS'
     :param pr_id: id личного дела студента
     :param dis_id: id дисциплины
-    :return: параметры для dGS_TERMS [start_crs, start_typ_id, stop_typ_id, tedp_id]
+    :return: tuple[ dict, list[str] ] - словарь с именами аргументов и их значениями, список с именами OUT-параметров
     """
     tp_id = _get_teach_plan_id(pr_id)
 
@@ -131,6 +111,8 @@ def _get_params(pr_id: int, dis_id: int) -> list[int]:
         ('stop_typ_id', int),
     ]
 
+    # запрос для создания таблицы с параметрами для процедуры 'dgr_utl.dGS_TERMS'
+    # она возвращает триместры начала и конца дисциплины
     select = ' dgp_start.typ_typ_id, dgp_stop.typ_typ_id, table_aliace.* '
     where = 'join dgr_periods dgp_start ' \
             'on(table_aliace.dgp_start_id=dgp_start.dgp_id) ' \
@@ -144,14 +126,41 @@ def _get_params(pr_id: int, dis_id: int) -> list[int]:
             'ON(ds.DIS_DIS_ID = d.DIS_ID) '\
             f'where table_aliace.pr_pr_id={pr_id} and d.dis_id = {dis_id}'
 
-    #создаем таблицу с параметрами
     param_table = create_sql_table(table_name='dgr_students', select=select, where=where, add_fields=add_attr)
-    start_typ_id = param_table[0].start_typ_id
-    stop_typ_id = param_table[0].stop_typ_id
-    start_crs = param_table[0].start_crs
-    tedp_id = _get_type_of_edu_periods(tp_id)
+    args = {
+        'P_START_CRS': param_table[0].start_crs,        # курс студента с которого студент начал изучение дисциплины
+        'P_START_TYP':  param_table[0].start_typ_id,    # TY_PERIOD начала дисциплины
+        'P_STOP_TYP': param_table[0].stop_typ_id,       # TY_PERIOD конца дисциплины
+        'P_TEDP_ID': _get_type_of_edu_periods(tp_id),   # тип периода обучения (триместр/семестр)
+        'Q_START_TERM': 0,
+        'Q_STOP_TERM': 0
+    }
 
-    return [start_crs, start_typ_id, stop_typ_id, tedp_id]
+    return args, ['Q_START_TERM', 'Q_STOP_TERM']
+
+
+def get_tpdl(pr_id: int, dis_id: int) -> int | None:
+    """
+    Получаем схему доставки для дисциплины у студента
+    :param pr_id: id личной записи студента
+    :param dis_id: id дисциплины
+    :return: id схемы доставки
+    """
+    tp_id = _get_teach_plan_id(pr_id)
+    where = ',TERMS t ' \
+            ',TEACH_PROGRAMS tp ' \
+            'WHERE table_aliace.TER_TER_ID = t.TER_ID ' \
+            'AND table_aliace.TP_TP_ID = tp.TP_ID ' \
+            f'AND t.TP_TP_ID = {tp_id} ' \
+            f'AND tp.DIS_DIS_ID = {dis_id}'
+
+    request_table = create_sql_table(table_name='TP_COMPONENTS', where=where)
+
+    if not request_table:
+        logger.debug(f' Для pr_id: {pr_id} и dis_id: {dis_id} не существует TP_COMPONENT')
+        return None
+
+    return request_table[0].tpdl_tpdl_id if request_table[0].tpdl_tpdl_id else None
 
 
 def get_dis_studies(dss_id: int) -> dict:
@@ -207,8 +216,6 @@ def type_of_work(dgr_id: int) -> dict:
 
 
 if __name__ == '__main__':
-    _init_logger('load')
-    logger = logging.getLogger('load.main')
 
     # реализация логики выгрузки
     dis_groups = get_dis_groups()   # выгружаем дис группы
@@ -234,6 +241,20 @@ if __name__ == '__main__':
 
         # ветка дисциплины по выбору
         if study_type == 'дпв':
-            pr_list = get_pr_id(key[0])    # получаем личные дела студентов в группе с id = key
+            discipline_id: int = dis_studies[dds_id].dis_dis_id
+            pr_lst = get_pr_id(key[0])    # получаем личные дела студентов в группе с id = key
+            tpdl_lst = []
+            term_bound = []
+            for pr in pr_lst:
+                term_bound.append(procedure(procedure_name='dgr_utl.dGS_TERMS',
+                                            args=_get_args(pr, discipline_id)[0],
+                                            out_args=_get_args(pr, discipline_id)[1]
+                                            ))
+                tpdl_lst.append(get_tpdl(pr, discipline_id))
+
+            for i in range(len(pr_lst)):
+                print(f'tpdl_id: {tpdl_lst[i]} bounds: {term_bound[i]}')
+            break
+
 
 
