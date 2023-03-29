@@ -1,5 +1,6 @@
 # Подготовка данных для выгрузки со стороны DIS_GROUP
 from oracle_table import get_table, create_sql_table, procedure
+from additions import range_ty_period
 from log import _init_logger
 import logging
 
@@ -37,26 +38,6 @@ def get_tpd_from_tpdl(tpdl_id: int) -> dict:
     return get_table('TPD_CHAPTERS', where=where)
 
 
-def get_tc_time(tc_id: int) -> dict:
-    """
-    Все TC_TIME по tc_id
-    :param tc_id: id времени учебного раздела
-    :return: TIME_OF_TPD_CHAPTERS: dict[tc_id] : dataclass(поле таблицы: значение)
-    """
-    where = f'WHERE table_aliace.tc_tc_id = {tc_id}'
-    return get_table('TIME_OF_TPD_CHAPTERS', where=where)
-
-
-def get_teach_prog(tp_id: int) -> dict:
-    """
-    Все TEACH_PROGRAMS по tp_id
-    :param tp_id:
-    :return: TEACH_PROGRAMS: dict[tp_id] = dataclass(поле таблицы: значение)
-    """
-    where = f'WHERE table_aliace.tp_id = {tp_id}'
-    return get_table('TEACH_PROGRAMS', where=where)
-
-
 def get_pr_id(dgr_id: int) -> list:
     """
     :param dgr_id: id группы
@@ -88,55 +69,26 @@ def _get_teach_plan_id(pr_id: int) -> int:
     return create_sql_table(table_name='TP_FOR_STUDENTS', where=where)[0].tpl_tp_id
 
 
-def _get_type_of_edu_periods(teach_plan: int) -> int:
+def _get_ty_period(dgr_id: int) -> list[int]:
     """
-    :param teach_plan: id учебного плана
-    :return: тип учебного периода
+    :param dgr_id: id dis_group
+    :return: список ty_periods от начала дисциплины до конца
     """
-    where = f' WHERE tp_id = {teach_plan}'
-    return create_sql_table(table_name='teach_plans', where=where)[0].tedp_tedp_id
-
-
-def _get_args(pr_id: int, dis_id: int) -> tuple[dict, list[str]]:
-    """
-    Расчет параметров для процедуры 'dgr_utl.dGS_TERMS'
-    :param pr_id: id личного дела студента
-    :param dis_id: id дисциплины
-    :return: tuple[ dict, list[str] ] - словарь с именами аргументов и их значениями, список с именами OUT-параметров
-    """
-    tp_id = _get_teach_plan_id(pr_id)
+    select = 'dp_s.TYP_TYP_ID, dp_k.TYP_TYP_ID, table_aliace.*'
+    where = ' ,DGR_PERIODS dp_s ' \
+            ',DGR_PERIODS dp_k ' \
+            'WHERE dp_s.DGP_ID = table_aliace.DGP_START_ID  ' \
+            'AND dp_k.dgp_id = table_aliace.DGP_STOP_ID  ' \
+            f'AND table_aliace.DGR_ID = {dgr_id}'
 
     add_attr = [
-        ('start_typ_id', int),
-        ('stop_typ_id', int),
+        ('start_ty_period', int),
+        ('stop_ty_period', int)
     ]
 
-    # запрос для создания таблицы с параметрами для процедуры 'dgr_utl.dGS_TERMS'
-    # она возвращает триместры начала и конца дисциплины
-    select = ' dgp_start.typ_typ_id, dgp_stop.typ_typ_id, table_aliace.* '
-    where = 'join dgr_periods dgp_start ' \
-            'on(table_aliace.dgp_start_id=dgp_start.dgp_id) ' \
-            'join dis_groups dgr ' \
-            'on(table_aliace.dgr_dgr_id=dgr.dgr_id) ' \
-            'join dgr_periods dgp_stop ' \
-            'on(coalesce(table_aliace.dgp_stop_id, dgr.dgp_stop_id)=dgp_stop.dgp_id) ' \
-            'JOIN DIS_STUDIES ds '\
-            'on(dgr.DSS_DSS_ID = ds.DSS_ID) '\
-            'JOIN DISCIPLINES d '\
-            'ON(ds.DIS_DIS_ID = d.DIS_ID) '\
-            f'where table_aliace.pr_pr_id={pr_id} and d.dis_id = {dis_id}'
-
-    param_table = create_sql_table(table_name='dgr_students', select=select, where=where, add_fields=add_attr)
-    args = {
-        'P_START_CRS': param_table[0].start_crs,        # курс студента с которого студент начал изучение дисциплины
-        'P_START_TYP':  param_table[0].start_typ_id,    # TY_PERIOD начала дисциплины
-        'P_STOP_TYP': param_table[0].stop_typ_id,       # TY_PERIOD конца дисциплины
-        'P_TEDP_ID': _get_type_of_edu_periods(tp_id),   # тип периода обучения (триместр/семестр)
-        'Q_START_TERM': 0,
-        'Q_STOP_TERM': 0
-    }
-
-    return args, ['Q_START_TERM', 'Q_STOP_TERM']
+    ty_period = create_sql_table(table_name='DIS_GROUPS', where=where, select=select, add_fields=add_attr)
+    start, stop = ty_period[0].start_ty_period, ty_period[0].stop_ty_period
+    return range_ty_period(start, stop)
 
 
 def get_tpdl(pr_id: int, dis_id: int) -> int | None:
@@ -161,6 +113,30 @@ def get_tpdl(pr_id: int, dis_id: int) -> int | None:
         return None
 
     return request_table[0].tpdl_tpdl_id if request_table[0].tpdl_tpdl_id else None
+
+
+def get_trim(pr_id: int, tpdl_id: int) -> list[int]:
+    """
+    Триместры, в которых преподаётся дисциплина
+    :param pr_id: id личного дела студента
+    :param tpdl_id: схема доставки
+    :return: список TER_ID
+    """
+    tp_id = _get_teach_plan_id(pr_id)
+    select = "t.TER_ID, table_aliace.*"
+    where = "	,TPD_CHAPTERS tc " \
+            ",TERMS t " \
+            "WHERE table_aliace.TER_TER_ID = t.TER_ID " \
+            f"AND tc.TPDL_TPDL_ID = {tpdl_id} " \
+            "AND table_aliace.TC_TC_ID  = tc.TC_ID " \
+            f"AND t.TP_TP_ID = {tp_id}"
+
+    add_attr = [
+        ("ter_id", int)
+    ]
+
+    table = create_sql_table(table_name="TP_TPD_CROSSINGS", select=select, where=where, add_fields=add_attr)
+    return [table[i].ter_id for i in table]
 
 
 def get_dis_studies(dss_id: int) -> dict:
@@ -229,6 +205,9 @@ if __name__ == '__main__':
         study_type = type_of_study(dis_studies[dds_id])     # узнаем тип дисциплины
         work_type = type_of_work(key[0])   # узнаем тип работ группы
 
+        if study_type != 'дпв':
+            continue
+
         # ветка электива
         if study_type == 'эл':
             # дергаем чаптер через схему доставки напрямую
@@ -244,17 +223,12 @@ if __name__ == '__main__':
             discipline_id: int = dis_studies[dds_id].dis_dis_id
             pr_lst = get_pr_id(key[0])    # получаем личные дела студентов в группе с id = key
             tpdl_lst = []
-            term_bound = []
             for pr in pr_lst:
-                term_bound.append(procedure(procedure_name='dgr_utl.dGS_TERMS',
-                                            args=_get_args(pr, discipline_id)[0],
-                                            out_args=_get_args(pr, discipline_id)[1]
-                                            ))
                 tpdl_lst.append(get_tpdl(pr, discipline_id))
 
+            logger.debug(f"dgr_id: {key[0]}")
             for i in range(len(pr_lst)):
-                print(f'tpdl_id: {tpdl_lst[i]} bounds: {term_bound[i]}')
-            break
-
+                logger.debug(f'pr_id: {pr_lst[i]} tpdl_id: {tpdl_lst[i]}')
+            logger.debug("-"*20)
 
 
