@@ -1,6 +1,7 @@
 # Подготовка данных для выгрузки со стороны DIS_GROUP
-from oracle_table import get_table, create_sql_table, procedure
-from additions import range_ty_period
+from oracle_table import get_table, create_sql_table
+from functools import cmp_to_key
+from additions import range_ty_period, compare
 from log import _init_logger
 import logging
 
@@ -115,7 +116,7 @@ def get_tpdl(pr_id: int, dis_id: int) -> int | None:
     return request_table[0].tpdl_tpdl_id if request_table[0].tpdl_tpdl_id else None
 
 
-def get_trim(pr_id: int, tpdl_id: int) -> list[int]:
+def get_terms(pr_id: int, tpdl_id: int) -> list[int]:
     """
     Триместры, в которых преподаётся дисциплина
     :param pr_id: id личного дела студента
@@ -137,6 +138,23 @@ def get_trim(pr_id: int, tpdl_id: int) -> list[int]:
 
     table = create_sql_table(table_name="TP_TPD_CROSSINGS", select=select, where=where, add_fields=add_attr)
     return [table[i].ter_id for i in table]
+
+
+def unique_tpdl(lst: list[list[int]]) -> list[list[int]]:
+    """
+    Удаляем дубли tpdl
+    :param lst: список личных дел студентов и их схем доставок
+    :return: список уникальных tpdl
+    """
+    lst = sorted(lst, key=cmp_to_key(compare))  # сортировка списка по tpdl
+    l = r = 0
+    while r < len(lst):
+        while r < len(lst) - 1 and lst[r][1] == lst[l][1]:
+            r += 1
+        l += 1
+        lst[l] = lst[r]
+        r += 1
+    return lst[:l]
 
 
 def get_dis_studies(dss_id: int) -> dict:
@@ -191,6 +209,59 @@ def type_of_work(dgr_id: int) -> dict:
     return get_table('TYPE_OF_WORKS', where=where)
 
 
+def checker(dgr_id: int, lst: list[list[int]]) -> bool:
+    ty_periods: list[int] = _get_ty_period(dgr_id)  # узнаем учебные периоды группы
+    terms: dict = {}     # key = tpdl_id, value = [terms]
+    ch_value: dict = {} # key = ty_period value = [нагрузки по схемам доставки на этот учебный период]
+
+    for i in range(len(lst)):
+        terms[lst[i][1]] = get_terms(lst[i][0], lst[i][1])
+
+    for key in terms:
+        # сравниваем количество учебных периодов у студента в схеме доставки  и количеством учебных периодов группы
+        if len(terms[key]) != len(ty_periods):
+            return False
+        else:
+            for item in range(len(terms[key])):
+                # запрос для получения нагрузки
+                value_where = ",TPD_CHAPTERS tc, " \
+                              "TP_TPD_CROSSINGS ttc " \
+                              "WHERE ttc.TC_TC_ID = tc.TC_ID " \
+                              f"AND ttc.TER_TER_ID = {terms[key][item]} " \
+                              f"AND tc.TPDL_TPDL_ID = {key} " \
+                              "AND table_aliace.TC_TC_ID = tc.TC_ID " \
+                              "ORDER BY ttc.TER_TER_ID"
+                val_table = create_sql_table(table_name="TIME_OF_TPD_CHAPTERS", where=value_where)
+                val_array = [0] * 7
+
+                # получаем массив с количеством часов лекции на 1 индексе,
+                # количеством часов лаб на 2 индексе и практик на 6 индексе
+                for i in val_table:
+                    val_array[val_table[i].tow_tow_id if val_table[i].tow_tow_id in [1, 2, 6] else 0] = val_table[i].value
+
+                # раскидываем нагрузку по ty_period
+                if ty_periods[item] in ch_value:
+                    ch_value[ty_periods[item]].append([val_array[1], val_array[2], val_array[6]])
+                else:
+                    ch_value[ty_periods[item]] = [[val_array[1], val_array[2], val_array[6]]]
+
+    # идем по всем ty_period
+    # сравниваем значения нагрузок по значению
+    # во внешнем цикле идем по столбца, а во внутреннем по строкам и сравниваем значение со значением первой строки
+    # примерная схема этой реализации (в конкретном ty_period)
+    # [лек1, лаб1, практ1]
+    # [лек2, лаб2, практ2]
+    # [лек3, лаб3, практ3]
+    # [лек4, лаб4, практ4]
+
+    for ty_period in ch_value:
+        for col in range(len(ch_value[ty_period][0])):
+            for row in range(1, len(ch_value[ty_period])):
+                if ch_value[ty_period][row][col] != ch_value[ty_period][0][col]:
+                    return False
+    return True
+
+
 if __name__ == '__main__':
 
     # реализация логики выгрузки
@@ -222,13 +293,17 @@ if __name__ == '__main__':
         if study_type == 'дпв':
             discipline_id: int = dis_studies[dds_id].dis_dis_id
             pr_lst = get_pr_id(key[0])    # получаем личные дела студентов в группе с id = key
-            tpdl_lst = []
-            for pr in pr_lst:
-                tpdl_lst.append(get_tpdl(pr, discipline_id))
+            pr_tpdl_lst = [[i] for i in pr_lst]
+            for i in range(len(pr_tpdl_lst)):
+                pr_tpdl_lst[i].append(get_tpdl(pr_lst[i], discipline_id))
 
-            logger.debug(f"dgr_id: {key[0]}")
-            for i in range(len(pr_lst)):
-                logger.debug(f'pr_id: {pr_lst[i]} tpdl_id: {tpdl_lst[i]}')
-            logger.debug("-"*20)
+            uniq_tpdl = unique_tpdl(pr_tpdl_lst)
+            checker(key[0], uniq_tpdl)
+            break
+
+
+
+
+
 
 
