@@ -21,6 +21,3 @@ def range_ty_period(start: int, stop: int) -> list[int]:
 
     return ty_list
 
-
-def compare(x: list[int], y: list[int]):
-    return x[1] - y[1]
