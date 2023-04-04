@@ -2,6 +2,7 @@ from peewee import *
 from pwiz import *
 from setting import connect_setting_postgres
 
+# Подключение к базе
 pg_db = PostgresqlDatabase("postgres",
                            user=connect_setting_postgres['USERNAME'],
                            password=connect_setting_postgres['PASSWORD'],
@@ -14,7 +15,12 @@ models = generate_models(pg_db, schema="public", table_names=["stu_groups"])
 Stu_groups = models["stu_groups"]
 
 
-def _get_attr(model: str):
+def _get_attr(model: str) -> list:
+    """
+    По названию модели получаем список её аттребутов
+    :param model: название модели
+    :return: список аттребутов
+    """
     attr: list = []
     # итерируемся по атрибутам класса, исключая Protected Attributes и DoesNotExist
     for item in vars(model):

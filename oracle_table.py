@@ -26,20 +26,23 @@ def procedure(procedure_name: str, args: dict = None, out_args: list[str] = None
     :return: значения OUT агруметов
     """
 
+    # подключение к базе oracle
     with cx_Oracle.connect(
             user=connect_setting_oracle['USERNAME'],
             password=connect_setting_oracle['PASSWORD'],
             dsn=connect_setting_oracle['DSN']
     ) as conn:
-        cursor = conn.cursor()
-        args_list = list(args.values())
-        result = cursor.callproc(procedure_name, args_list)
+        cursor = conn.cursor()  # создаем курсор
+        args_list = list(args.values())     # создаем список с именами парамметров процедуры
+        result = cursor.callproc(procedure_name, args_list)     # вызываем процу и записываем результат
 
+    # обнавляем входные значения
     idx = 0
     for key in args:
         args[key] = result[idx]
         idx += 1
 
+    # берем из аргуметнов только выходные (OUT)
     out: list[int] = []
     for key in out_args:
         out.append(args[key])
@@ -50,7 +53,6 @@ def procedure(procedure_name: str, args: dict = None, out_args: list[str] = None
 def create_sql_table(table_name: str, select: str = None, where: str = None, add_fields: list[tuple] = None) -> dict:
     """
     Создает словарь с суррогатными ключами и в значение уходят все поля таблицы
-
     Базовый запрос: SELECT {select if select else "table_aliace.*"} FROM {table_name} table_aliace {where if where else ""}
 
     :param table_name:  имя таблицы
@@ -60,7 +62,7 @@ def create_sql_table(table_name: str, select: str = None, where: str = None, add
     :return:  dict[0..n] : dataclass(поля таблицы и их значения)
     """
 
-    out_table = dict()
+    out_table = dict()   # словарь, который будет содержать таблицу
     engine = create_engine(ENGINE_PATH, echo=True)
     attr = _get_attr(table_name, engine, add_fields)  # получаем поля таблицы и их типы (int, str)
     meta = _get_meta(table_name, attr)  # получаем dataclass table_name, у которого поля - это атрибуты attr
@@ -107,6 +109,7 @@ def get_table(table_name: str, select: str = None, where: str = None, add_fields
 
 def _get_pk(table_name, engine: Engine) -> list:
     """
+    Pk таблицы
     :param table_name  имя таблицы
     :param engine  connect
     :return: pk: list  список с pk таблицы
@@ -137,12 +140,15 @@ def _get_attr(table_name, engine: Engine, add_fields: list[tuple] = None) -> lis
     :param: add_fields: дополнительные поля таблицы
     :return attr: список кортежей с полем таблицы и его типом (int, str)
     """
-    attr = list()
+    attr = list()   # список с аргументами
     inspector = inspect(engine)
-    columns = inspector.get_columns(f'{table_name}')
+    columns = inspector.get_columns(f'{table_name}')    # получаем названия полей таблицы
+
+    # сначала закидываем дополнительные поля, т.к. при запросе их результат будет первым
     if add_fields:
         attr += add_fields
 
+    # добавляем все поля таблицы table_name
     for column in columns:
         attr.append((column['name'], _get_type_attr(str(column['type']))))
 
@@ -151,6 +157,7 @@ def _get_attr(table_name, engine: Engine, add_fields: list[tuple] = None) -> lis
 
 def _get_type_attr(oracle_type):
     """
+    Преобразовываем типы данных Oracle к Python
     :param oracle_type: тип данных oracle
     :return: типа данных python
     """
@@ -163,6 +170,7 @@ def _get_type_attr(oracle_type):
 
 def _get_meta(name, attr):
     """
+    Создвем метакласс Python с названием name и полями attr
     :param name: имя создаваемого dataclass
     :param attr: список полей класса
     :return: dataclass name с полями attr
@@ -172,6 +180,9 @@ def _get_meta(name, attr):
 
 def _get_pk_idx(attr: list[tuple], engine: Engine, table_name) -> list:
     """
+    Получаем индексы pk в списке атрибутов. Это нужно для их удаления, при создании метакласса,
+    т.к. pk таблицы - это ключи словаря
+
     :param attr: список полей таблицы
     :param engine:  connect
     :param table_name:  имя таблицы

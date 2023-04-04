@@ -10,8 +10,6 @@ _init_logger('load')
 logger = logging.getLogger('load.main')
 
 
-# логирование
-
 def get_dis_groups() -> dict:
     """
     DIS_GROUPS которые входят в 2022 год, т.е.
@@ -41,6 +39,7 @@ def get_tpd_from_tpdl(tpdl_id: int) -> dict:
 
 def get_pr_id(dgr_id: int) -> list:
     """
+    По id группы получаем список с id PERSONAL RECORD студентов этой группы
     :param dgr_id: id группы
     :return: список pr_id всех студентов группы
     """
@@ -55,6 +54,7 @@ def get_pr_id(dgr_id: int) -> list:
 
 def _get_teach_plan_id(pr_id: int) -> int:
     """
+    По id (PERSONAL RECORD) узнаем учебный план студента
     :param pr_id: id личного дела студента
     :return: id учебного плана студента
     """
@@ -63,7 +63,6 @@ def _get_teach_plan_id(pr_id: int) -> int:
     add_field = [('cur_tfs', int)]
 
     tfs_dict = create_sql_table('PERSONAL_RECORDS', select=select, where=where, add_fields=add_field)
-
     tfs_id = tfs_dict[list(tfs_dict.keys())[0]].cur_tfs
 
     where = f' WHERE tfs_id = {tfs_id}'
@@ -171,8 +170,9 @@ def get_tpdl_for_fac(fcr_id: int) -> int:
 
 def type_of_study(study: type) -> str:
     """
+    Тип дисциплины (электив, факультатив, дисциплина по выбору)
     :param study: - dataclass по ключу dss_id словаря  dis_studies
-    :return: тип дисциплины (электив, факультатив, дисциплина по выбору)
+    :return: тип дисциплины
     """
     if study.tpdl_tpdl_id:
         return 'эл'     # электив
@@ -193,6 +193,12 @@ def type_of_work(dgr_id: int) -> dict:
 
 
 def checker(dgr_id: int, lst: list[list[int]]) -> bool:
+    """
+    Проверяем наличие различия нагрузки по часам у лекции, практик и лаб у студентов одной группы
+    :param dgr_id: id группы (DIS_GROUPS)
+    :param lst: список с парами (id личной записи студента, id схемы доставки)
+    :return: True - нагрузка одинаковая / False - нагрузка разная
+    """
     ty_periods: list[int] = _get_ty_period(dgr_id)  # узнаем учебные периоды группы
     terms: dict = {}     # key = tpdl_id, value = [terms]
     ch_value: dict = {} # key = ty_period value = [нагрузки по схемам доставки на этот учебный период]
