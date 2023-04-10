@@ -3,10 +3,6 @@ from peewee import *
 database = PostgresqlDatabase('postgres', **{'host': 'localhost', 'port': 5432, 'user': 'postgres', 'password': ''})
 
 
-class UnknownField(object):
-    def __init__(self, *_, **__): pass
-
-
 class BaseModel(Model):
     class Meta:
         database = database
@@ -25,12 +21,11 @@ class Divisions(BaseModel):
 
 
 class StuGroups(BaseModel):
+    sgr_id = AutoField(column_name="sgr_id")
     dgr_id = IntegerField(null=True)
     info = CharField(null=True)
     name = CharField(unique=True)
-    sgr_id = AutoField()
-    sgr_sgr_id = IntegerField(null=True)
-    sgr_sgr_id__ = ForeignKeyField(column_name='sgr_sgr_id__', field='sgr_id', model='self', null=True)
+    sgr_sgr_id = ForeignKeyField(column_name='sgr_sgr_id', field='sgr_id', model='self', null=True)
 
     class Meta:
         table_name = 'stu_groups'
