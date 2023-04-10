@@ -1,47 +1,37 @@
 from peewee import *
-from pwiz import *
-from setting import connect_setting_postgres
+from postgres_model import *
+from log import _init_logger
+import logging
 
-# Подключение к базе
-pg_db = PostgresqlDatabase("postgres",
-                           user=connect_setting_postgres['USERNAME'],
-                           password=connect_setting_postgres['PASSWORD'],
-                           host=connect_setting_postgres['HOST'],
-                           port=connect_setting_postgres['PORT']
-)
-
-# Models
-models = generate_models(pg_db, schema="public", table_names=["stu_groups"])
-Stu_groups = models["stu_groups"]
+# инициализируем лог
+_init_logger('load')
+logger = logging.getLogger('postgres_load.main')
 
 
-def _get_attr(model: str) -> list:
+def insert_stu_groups(data: dict, dgr_id: tuple):
     """
-    По названию модели получаем список её аттребутов
-    :param model: название модели
-    :return: список аттребутов
+    Добавление STU_GROUP
+    :param data: словрь с данными из таблицы
+    :param dgr_id: ключ словаря - id группы
+    :return: создаем запись
     """
-    attr: list = []
-    # итерируемся по атрибутам класса, исключая Protected Attributes и DoesNotExist
-    for item in vars(model):
-        if item[0] != '_' and item != 'DoesNotExist':
-            attr.append(item)
-    return attr
+    # проверяем: есть ли уже запись с таким sgr_id в таблице
+    if StuGroups.get_or_none(dgr_id=dgr_id[0]):
+        logger.debug(f"Запись с dgr_id {dgr_id[0]}")
+        return
 
+    # достаем верхний уровень (если он существует), чтобы восстановить ссылку
+    sgr_sgr_id = StuGroups.get_or_none(dgr_id=data[dgr_id].dgr_dgr_id)
 
-class BaseModel(Model):
-    class Meta:
-        database = pg_db
+    # проверяем: создан ли верхний уроовень для этой группы
+    if data[dgr_id].dgr_dgr_id and not sgr_sgr_id:
+        logger.debug(f"Для записи с dgr_id {dgr_id[0]} не создан верхний уровень dgr_dgr_id {data[dgr_id].dgr_dgr_id}")
+        return
 
-
-class StuGroup(BaseModel):
-    sgr_id = AutoField(column_name="sgr_id")
-    name = CharField(max_length=240)
-    dgr_id = IntegerField()
-    sgr_sgr_id = IntegerField()
-    info = CharField(max_length=1000)
-
-
-
+    # создаем новую запись
+    StuGroups.create(
+        name=data[dgr_id].fullname,
+        sgr_sgr_id=sgr_sgr_id if sgr_sgr_id else None,
+    )
 
 
