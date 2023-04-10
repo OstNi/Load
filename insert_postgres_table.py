@@ -31,6 +31,7 @@ def insert_stu_groups(data: dict, dgr_id: tuple):
     # создаем новую запись
     StuGroups.create(
         name=data[dgr_id].fullname,
+        dgr_id=dgr_id[0],
         sgr_sgr_id=sgr_sgr_id if sgr_sgr_id else None,
     )
 

@@ -1,6 +1,6 @@
 # Подготовка данных для выгрузки со стороны DIS_GROUP
 from oracle_table import get_table, create_sql_table
-from postgres_table import *
+from insert_postgres_table import *
 from additions import range_ty_period
 from log import _init_logger
 import logging
