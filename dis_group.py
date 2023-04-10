@@ -1,6 +1,6 @@
 # Подготовка данных для выгрузки со стороны DIS_GROUP
 from oracle_table import get_table, create_sql_table
-from functools import cmp_to_key
+from postgres_table import *
 from additions import range_ty_period
 from log import _init_logger
 import logging
@@ -262,6 +262,10 @@ if __name__ == '__main__':
 
         if dis_studies[dds_id].foe_foe_id != 1:     # если это не очная форма обучения, пропускаем
             continue
+
+        # создаем STU_GROUP
+        insert_stu_groups(dis_groups, key)
+        break
 
         study_type = type_of_study(dis_studies[dds_id])     # узнаем тип дисциплины
         work_type = type_of_work(key[0])   # узнаем тип работ группы
