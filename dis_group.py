@@ -37,6 +37,36 @@ def get_tpd_from_tpdl(tpdl_id: int) -> dict:
     return get_table('TPD_CHAPTERS', where=where)
 
 
+def get_tc_time(tc_id: int) -> dict:
+    """
+    TIME_OF_TPD_CHAPTER по tc_id
+    :param tc_id: id tpd_chapter
+    :return: TIME_OF_TPD_CHAPTERS: dict[totc_id] = dataclass(поле таблицы: значение)
+    """
+    where = f"WHERE table_aliace.tc_tc_id = {tc_id}"
+    return get_table(table_name="TIME_OF_TPD_CHAPTERS", where=where)
+
+
+def get_teach_program(tp_id: int) -> dict:
+    """
+    TEACH_PROGRAM по tc_id
+    :param tp_id: id teach_program
+    :return: TEACH_PROGRAMS: dict[tp_id] = dataclass(поле таблицы: значение)
+    """
+    where = f"WHERE table_aliace.tp_id = {tp_id}"
+    return get_table(table_name="TEACH_PROGRAMS", where=where)
+
+
+def get_discipline(dis_id: int) -> dict:
+    """
+    DISCIPLINES по dis_id
+    :param dis_id: id discipline
+    :return: DISCIPLINES: dict[dis_id] = dataclass(поле таблицы: значение)
+    """
+    where = f" WHERE table_aliace.dis_id = {dis_id}"
+    return get_table(table_name="DISCIPLINES", where=where)
+
+
 def get_pr_id(dgr_id: int) -> list:
     """
     По id группы получаем список с id PERSONAL RECORD студентов этой группы
@@ -251,48 +281,6 @@ def checker(dgr_id: int, lst: list[list[int]]) -> bool:
                     return False
     return True
 
-
-if __name__ == '__main__':
-
-    # реализация логики выгрузки
-    dis_groups = get_dis_groups()   # выгружаем дис группы
-    for key in dis_groups:
-        dis_studies = get_dis_studies(dis_groups[key].dss_dss_id)   # получаем dis_studies, которую они посещают
-        dds_id = list(dis_studies.keys())[0]
-
-        if dis_studies[dds_id].foe_foe_id != 1:     # если это не очная форма обучения, пропускаем
-            continue
-
-        # создаем STU_GROUP
-        insert_stu_groups(dis_groups, key)
-        break
-
-        study_type = type_of_study(dis_studies[dds_id])     # узнаем тип дисциплины
-        work_type = type_of_work(key[0])   # узнаем тип работ группы
-
-        # ветка электива
-        if study_type == 'эл':
-            # дергаем чаптер через схему доставки напрямую
-            chapter = get_tpd_from_tpdl(dis_studies[dds_id].tpdl_tpdl_id)
-
-        # ветка факультатива
-        if study_type == 'фак':
-            # через FACULTATIVE_REQUESTS выходим на схему доставки и дергаем чаптер
-            chapter = get_tpd_from_tpdl(get_tpdl_for_fac(dis_studies[dds_id].fcr_fcr_id))
-
-        # ветка дисциплины по выбору
-        if study_type == 'дпв':
-            discipline_id: int = dis_studies[dds_id].dis_dis_id
-            pr_lst = get_pr_id(key[0])    # получаем личные дела студентов в группе с id = key
-            pr_tpdl_lst = [[i] for i in pr_lst]
-            for i in range(len(pr_tpdl_lst)):
-                pr_tpdl_lst[i].append(get_tpdl(pr_lst[i], discipline_id))
-
-            if not checker(key[0], pr_tpdl_lst):
-                logger.debug(f"Error. Группа dgr_id: {key[0]} не может быть создана")
-                continue
-
-            chapter = get_tpd_from_tpdl(pr_tpdl_lst[0][1])  # берем TC по первой tpdl
 
 
 
