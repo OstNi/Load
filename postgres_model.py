@@ -1,6 +1,26 @@
 from peewee import *
+from log import _init_logger
+import logging
 
+# init logger
+_init_logger('load')
+logger = logging.getLogger('postgres_model.main')
+
+# Connect
 database = PostgresqlDatabase('postgres', **{'host': 'localhost', 'port': 5432, 'user': 'postgres', 'password': ''})
+
+
+def model_contains(model, key: str, values: int) -> bool:
+    """
+    Проверрка наличия записи c field_id по полю field
+    :param model: имя модели
+    :param key: имя поля
+    :param values: значение поля
+    :return: True - если запись создана / False - запись не создана
+    """
+    if model.get_or_none(**{key: values}):
+        return True
+    return False
 
 
 class BaseModel(Model):
