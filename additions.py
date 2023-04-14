@@ -1,3 +1,8 @@
+"""
+Вспомогательные функции
+"""
+
+
 def range_ty_period(start: int, stop: int) -> list[int]:
     """
     Заполнение списка ty_periods от start до stop

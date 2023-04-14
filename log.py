@@ -2,6 +2,11 @@ import logging
 import logging.handlers
 
 
+"""
+Настройка logger
+"""
+
+
 def _init_logger(name):
     logger = logging.getLogger(name)
     format = '%(asctime)s :: %(name)s:%(lineno)s :: %(levelname)s :: %(message)s'

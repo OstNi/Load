@@ -5,6 +5,11 @@ from additions import range_ty_period
 from log import _init_logger
 import logging
 
+
+"""
+Функции для выгрузки данных со стороны DIS_GROUP
+"""
+
 # инициализируем лог
 _init_logger('load')
 logger = logging.getLogger('load.main')

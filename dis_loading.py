@@ -3,6 +3,11 @@ from dis_group import *
 from datetime import datetime
 
 
+"""
+Алгоритм выгрузки со сторорны DIS_GROUP
+"""
+
+
 if __name__ == '__main__':
 
     # реализация логики выгрузки

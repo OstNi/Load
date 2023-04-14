@@ -4,6 +4,11 @@ from dataclasses import make_dataclass
 import cx_Oracle
 import re
 
+
+"""
+Подключение к Oracle и функции для выгрузки таблиц
+"""
+
 cx_Oracle.init_oracle_client(lib_dir=path['LIB_DIR'], config_dir=path['CONFIG_DIR'])
 
 ENGINE_PATH: str = (
