@@ -7,6 +7,9 @@ from oracle_table import *
 
 
 def exam_type_load():
+    """
+    Выгрузка всех exam_type
+    """
     oracle_exam_type = get_table(table_name="TYPE_OF_EXAMS")
     for key, value in oracle_exam_type.items():
         if not model_contains(model=ExamType, key="ext_id", values=key[0]):
@@ -18,6 +21,9 @@ def exam_type_load():
 
 
 def work_type_load():
+    """
+    Выгрузка всех work_types
+    """
     oracle_work_type = get_table(table_name="TYPE_OF_WORKS")
     for key, value in oracle_work_type.items():
         if not model_contains(model=WorkTypes, key="wot_id", values=key[0]):
@@ -33,6 +39,9 @@ def work_type_load():
 
 
 def teach_year_load():
+    """
+    Выгрузка всех teach_years
+    """
     oracle_teach_year = get_table(table_name="TEACH_YEARS")
     for key, value in oracle_teach_year.items():
         if not model_contains(model=TeachYears, key="ty_id", values=key[0]):
@@ -45,6 +54,9 @@ def teach_year_load():
 
 
 def education_form_load():
+    """
+    Выгрузка всех edu_forms
+    """
     oracle_education_form = get_table(table_name="FORM_OF_EDUCATIONS")
     for key, value in oracle_education_form.items():
         if not model_contains(model=EduForms, key="efo_id", values=key[0]):
@@ -56,6 +68,9 @@ def education_form_load():
 
 
 def edu_levels_load():
+    """
+    Выгрузка всех edu_levels
+    """
     oracle_edu_levels = get_table(table_name="TYPE_OF_SES")
     for key, value in oracle_edu_levels.items():
         if not model_contains(model=EduLevels, key="ele_id", values=key[0]):
@@ -68,6 +83,9 @@ def edu_levels_load():
 
 
 def division_load():
+    """
+    Выгрузка всех divisions
+    """
     oracle_division = get_table(table_name="DIVISIONS")
     for key, value in oracle_division.items():
         if not model_contains(model=Divisions, key="div_id", values=key[0]):
