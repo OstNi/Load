@@ -2,6 +2,10 @@ from peewee import *
 from log import _init_logger
 import logging
 
+"""
+Описание postgres моделей
+"""
+
 # init logger
 _init_logger('load')
 logger = logging.getLogger('postgres_model.main')
@@ -52,7 +56,7 @@ class StuGroups(BaseModel):
 
 
 class ExamType(BaseModel):
-    ext_id = AutoField()
+    ext_id = AutoField(primary_key=True)
     name = CharField(unique=True)
     short = CharField(unique=True)
 
@@ -151,7 +155,7 @@ class WorkTypes(BaseModel):
     include_in_tpd = CharField(null=True)
     name = CharField(unique=True)
     oneday = CharField(constraints=[SQL("DEFAULT 'n'::character varying")])
-    short = CharField(unique=True)
+    short = CharField(null=False)
     srt = IntegerField(null=True)
     wot_id = AutoField()
 
@@ -184,3 +188,21 @@ class TcTimes(BaseModel):
             (('wt_wot', 'tch_tch'), True),
         )
 
+
+class EduForms(BaseModel):
+    efo_id = AutoField()
+    name = CharField(unique=True)
+    short = CharField(unique=True)
+
+    class Meta:
+        table_name = 'edu_forms'
+
+
+class EduLevels(BaseModel):
+    ele_id = AutoField()
+    name = CharField(unique=True)
+    short = CharField(null=True, unique=True)
+    srt = IntegerField(null=True)
+
+    class Meta:
+        table_name = 'edu_levels'
