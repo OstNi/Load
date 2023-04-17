@@ -206,3 +206,19 @@ class EduLevels(BaseModel):
 
     class Meta:
         table_name = 'edu_levels'
+
+
+class GroupFaculties(BaseModel):
+    div_div = ForeignKeyField(column_name='div_div_id', field='div_id', model=Divisions)
+    efo_efo = ForeignKeyField(column_name='efo_efo_id', field='efo_id', model=EduForms)
+    ele_ele = ForeignKeyField(column_name='ele_ele_id', field='ele_id', model=EduLevels)
+    grf_id = AutoField()
+    num_course = IntegerField()
+    sgr_sgr = ForeignKeyField(column_name='sgr_sgr_id', field='sgr_id', model=StuGroups)
+    stu_count = IntegerField()
+
+    class Meta:
+        table_name = 'group_faculties'
+        indexes = (
+            (('ele_ele', 'efo_efo', 'sgr_sgr', 'div_div', 'num_course'), True),
+        )
