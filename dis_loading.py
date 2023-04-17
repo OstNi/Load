@@ -49,7 +49,7 @@ if __name__ == '__main__':
         # ветка дисциплины по выбору
         if study_type == 'дпв':
             discipline_id: int = dis_studies[dds_id].dis_dis_id
-            pr_lst = get_pr_id(key[0])    # получаем личные дела студентов в группе с id = key
+            pr_lst = get_pr_list(key[0])    # получаем личные дела студентов в группе с id = key
             pr_tpdl_lst = [[i] for i in pr_lst]
             for i in range(len(pr_tpdl_lst)):
                 pr_tpdl_lst[i].append(get_tpdl(pr_lst[i], discipline_id))
@@ -63,33 +63,33 @@ if __name__ == '__main__':
         tc_id = list(oracle_tc_chapter.keys())[0]
 
         if not model_contains(model=TprChapters, key="tch_id", values=tc_id[0]):
-            tpd_chapter = TprChapters(
+            tpd_chapter = TprChapters.create(
                 tch_id=tc_id[0],
                 name=oracle_tc_chapter[tc_id].name,
                 ext_ext=oracle_tc_chapter[tc_id].exam,
                 str=oracle_tc_chapter[tc_id].sort,
                 tpr_tpr=oracle_tc_chapter[tc_id].tp_tp_id
-            ).save()
+            )
 
         # Создаем TC_TIME
         oracle_tc_time = get_tc_time(tc_id[0])
         totc_id = list(oracle_tc_time.keys())[0]
 
         if not model_contains(model=TcTimes, key="tim_id", values=totc_id[0]):
-            tc_time = TcTimes(
+            tc_time = TcTimes.create(
                 tim_id=totc_id[0],
                 ctl_count=oracle_tc_time[totc_id].val_check,
                 tch_tch=tc_id[0],
                 val=oracle_tc_time[totc_id].value,
-                #wt_wot="TYPE_OF_WORK"
-            ).save()
+                wt_wot=list(work_type.keys())[0]
+            )
 
         # Создаем TEACH_PROGRAM
         oracle_teach_program = get_teach_program(oracle_tc_chapter[tc_id].tp_tp_id)
         tp_id = list(oracle_teach_program.keys())[0]
 
         if not model_contains(model=TeachPrograms, key="tpr_id", values=tp_id[0]):
-            teach_program = TeachPrograms(
+            teach_program = TeachPrograms.create(
                 tpd_id=tp_id[0],
                 confirm_date=oracle_teach_program[tp_id].date_of_confirm,
                 dis_dis=oracle_teach_program[tp_id].dis_dis_id,
@@ -97,17 +97,17 @@ if __name__ == '__main__':
                 practice_schedule=oracle_teach_program[tp_id].practice_schedule,
                 protocol=oracle_teach_program[tp_id].commend_protocol,
                 status=oracle_teach_program[tp_id].status
-            ).save()
+            )
 
         # Создаем DISCIPLIN
         oracle_discipline = get_discipline(oracle_teach_program[tp_id].dis_dis_id)
         dis_id = list(oracle_discipline.keys())[0]
 
         if not model_contains(model=Disciplines, key="dis_id", values=dis_id[0]):
-            discipline = Disciplines(
+            discipline = Disciplines.create(
                 dis_id=dis_id[0],
                 name=oracle_discipline[dis_id].name
-            ).save()
+            )
 
         # Создаем VERSION
         version = Versions(
@@ -122,8 +122,23 @@ if __name__ == '__main__':
             ver_ver=version.ver_id,
             #div_div=
             #typ_typ=
-        )
+        ).save()
 
+        # Созадем GROUP_WORKS
+        group_work = GroupWorks(
+            sgr_sgr=stu_group.sgr_id,
+            wt_wot=list(work_type.keys())[0]
+        ).save()
+
+        # Создаем GROUP_FACULTY
+        group_faculty = GroupFaculties(
+            efo_efo=dis_studies[dds_id].foe_foe_id,
+            stu_count=get_count_of_students(key[0]),
+            num_course=get_num_of_course(key[0]),
+            sgr_sgr=stu_group.sgr_id,
+            #div_div=
+            #ele_ele=
+        )
 
 
 
