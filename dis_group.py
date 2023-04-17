@@ -1,7 +1,7 @@
 # Подготовка данных для выгрузки со стороны DIS_GROUP
 from oracle_table import get_table, create_sql_table
-from insert_postgres_table import *
 from additions import range_ty_period
+from math import ceil
 from log import _init_logger
 import logging
 
@@ -13,6 +13,34 @@ import logging
 # инициализируем лог
 _init_logger('load')
 logger = logging.getLogger('load.main')
+
+
+def get_num_of_course(dgr_id: int) -> int:
+    """
+    :param dgr_id: id группы
+    :return: номер курса обучения
+    """
+    pr_lst = get_pr_list(dgr_id)    # список студентов группы
+
+    # берем первого студента и узнаем номер текущего триметра
+    where = "WHERE EXISTS ( " \
+            "SELECT * " \
+            "FROM PERSONAL_RECORDS pr " \
+            f"WHERE pr.PR_ID = {pr_lst[0]} " \
+            "AND DEK.CURRENT_TFS(pr.PR_ID) = table_aliace.TFS_ID)"
+
+    tfs = get_table(table_name="TP_FOR_STUDENTS", where=where)
+    tfs_id = list(tfs.keys())[0]
+
+    return ceil(tfs[tfs_id].current_term / 3)   # округляем в большую сторону (текущий трим / 3)
+
+
+def get_count_of_students(dgr_id: int) -> int:
+    """
+    :param dgr_id: id группы
+    :return: количество студентов в DIS_GROUP
+    """
+    return len(get_pr_list(dgr_id))
 
 
 def get_dis_groups() -> dict:
@@ -72,7 +100,7 @@ def get_discipline(dis_id: int) -> dict:
     return get_table(table_name="DISCIPLINES", where=where)
 
 
-def get_pr_id(dgr_id: int) -> list:
+def get_pr_list(dgr_id: int) -> list:
     """
     По id группы получаем список с id PERSONAL RECORD студентов этой группы
     :param dgr_id: id группы
