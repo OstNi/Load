@@ -64,6 +64,15 @@ class ExamType(BaseModel):
         table_name = 'exam_type'
 
 
+class TeachProgType(BaseModel):
+    tp_type = CharField()
+    tpt_id = AutoField()
+    type_info = CharField(null=True)
+
+    class Meta:
+        table_name = 'teach_prog_type'
+
+
 class Disciplines(BaseModel):
     dis_id = AutoField()
     name = CharField(unique=True)
@@ -81,9 +90,19 @@ class TeachPrograms(BaseModel):
     protocol = CharField(null=True)
     status = CharField()
     tpr_id = AutoField()
+    tpt_tpt = ForeignKeyField(column_name='tpt_tpt_id', field='tpt_id', model=TeachProgType)
 
     class Meta:
         table_name = 'teach_programs'
+
+
+class TpDeliveries(BaseModel):
+    name = CharField()
+    tpdl_id = AutoField()
+    tpr_tpr = ForeignKeyField(column_name='tpr_tpr_id', field='tpr_id', model=TeachPrograms, null=True)
+
+    class Meta:
+        table_name = 'tp_deliveries'
 
 
 class TprChapters(BaseModel):
@@ -91,13 +110,14 @@ class TprChapters(BaseModel):
     info = CharField(null=True)
     name = CharField()
     srt = IntegerField()
+    tc_id = IntegerField(null=True)
     tch_id = AutoField()
-    tpr_tpr = ForeignKeyField(column_name='tpr_tpr_id', field='tpr_id', model=TeachPrograms)
+    tpdl_tpdl = ForeignKeyField(column_name='tpdl_tpdl_id', field='tpdl_id', model=TpDeliveries)
 
     class Meta:
         table_name = 'tpr_chapters'
         indexes = (
-            (('name', 'tpr_tpr'), True),
+            (('name', 'tpdl_tpdl'), True),
         )
 
 
@@ -175,20 +195,6 @@ class GroupWorks(BaseModel):
         )
 
 
-class TcTimes(BaseModel):
-    ctl_count = IntegerField()
-    tch_tch = ForeignKeyField(column_name='tch_tch_id', field='tch_id', model=TprChapters)
-    tim_id = AutoField()
-    val = IntegerField()
-    wt_wot = ForeignKeyField(column_name='wt_wot_id', field='wot_id', model=WorkTypes)
-
-    class Meta:
-        table_name = 'tc_times'
-        indexes = (
-            (('wt_wot', 'tch_tch'), True),
-        )
-
-
 class EduForms(BaseModel):
     efo_id = AutoField()
     name = CharField(unique=True)
@@ -221,4 +227,19 @@ class GroupFaculties(BaseModel):
         table_name = 'group_faculties'
         indexes = (
             (('ele_ele', 'efo_efo', 'sgr_sgr', 'div_div', 'num_course'), True),
+        )
+
+
+class TcTimes(BaseModel):
+    ctl_count = IntegerField()
+    tch_tch = ForeignKeyField(column_name='tch_tch_id', field='tch_id', model=TprChapters)
+    tim_id = AutoField()
+    totc_id = IntegerField(null=True)
+    val = IntegerField()
+    wt_wot = ForeignKeyField(column_name='wt_wot_id', field='wot_id', model=WorkTypes)
+
+    class Meta:
+        table_name = 'tc_times'
+        indexes = (
+            (('wt_wot', 'tch_tch'), True),
         )
