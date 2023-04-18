@@ -39,12 +39,14 @@ if __name__ == '__main__':
         # ветка электива
         if study_type == 'эл':
             # дергаем чаптер через схему доставки напрямую
-            oracle_tc_chapter = get_tpd_from_tpdl(dis_studies[dds_id].tpdl_tpdl_id)
+            tpdl_id = dis_studies[dds_id].tpdl_tpdl_id
+            oracle_tc_chapter = get_tpd_from_tpdl(tpdl_id)
 
         # ветка факультатива
         if study_type == 'фак':
             # через FACULTATIVE_REQUESTS выходим на схему доставки и дергаем чаптер
-            oracle_tc_chapter = get_tpd_from_tpdl(get_tpdl_for_fac(dis_studies[dds_id].fcr_fcr_id))
+            tpdl_id = get_tpdl_for_fac(dis_studies[dds_id].fcr_fcr_id)
+            oracle_tc_chapter = get_tpd_from_tpdl(tpdl_id)
 
         # ветка дисциплины по выбору
         if study_type == 'дпв':
@@ -57,32 +59,73 @@ if __name__ == '__main__':
             if not checker(key[0], pr_tpdl_lst):
                 logger.debug(f"Error. Группа dgr_id: {key[0]} не может быть создана")
                 continue
-            oracle_tc_chapter = get_tpd_from_tpdl(pr_tpdl_lst[0][1])  # берем TC по первой tpdl
+
+            tpdl_id = pr_tpdl_lst[0][1]     # берем TC по первой tpdl
+            oracle_tc_chapter = get_tpd_from_tpdl(tpdl_id)
+
+        # проверсяем: существует ли группа, у которой dgr_dgr_id = id текущей группы
+        # если таких групп нет, то текущая группа - нижний уровень
+        if not any(value.dgr_dgr_id == dds_id[0] for value in dis_groups.values()):
+            pl_list = get_pr_list(key[0])
+
+            dif_group_fuculty = dict()
+            for pr_item in pl_list:
+                data = get_group_faculty_info(pr_item)
+                div_id, foe_id, edu_lvl = data["div_id"], data["foe_id"], data["edu_lvl"]
+
+                # группируем и считаем студентов по трем параметрам: div_id, foe_id, edu_lvl
+                if (div_id, foe_id, edu_lvl) in dif_group_fuculty:
+                    dif_group_fuculty[(div_id, foe_id, edu_lvl)] += 1
+                else:
+                    dif_group_fuculty[(div_id, foe_id, edu_lvl)] = 1
+
+            for info, value in dif_group_fuculty.items():
+                # Создаем GROUP_FACULTY
+                group_faculty = GroupFaculties(
+                    efo_efo=info[1],
+                    stu_count=value,
+                    num_course=get_num_of_course(key[0]),
+                    sgr_sgr=stu_group.sgr_id,
+                    div_div=info[0],
+                    ele_ele=info[2]
+                ).save()
+
+        # Создаем TP_DELIVERIES
+        oracle_tp_deliveries = get_tpdl(tpdl_id)
+        tpdl_key = list(oracle_tp_deliveries.keys())[0]
+
+        if not model_contains(model=TpDeliveries, key="tpdl_id", values=tpdl_id):
+            TpDeliveries.create(
+                tpdl_id=tpdl_id,
+                name=oracle_tp_deliveries[tpdl_key].name,
+                tpr_tpr=oracle_tp_deliveries[tpdl_key].tp_tp_id
+            )
 
         # Создаем TC
         tc_id = list(oracle_tc_chapter.keys())[0]
 
         if not model_contains(model=TprChapters, key="tch_id", values=tc_id[0]):
-            tpd_chapter = TprChapters.create(
-                tch_id=tc_id[0],
+            tpd_chapter = TprChapters(
+                tc_id=tc_id[0],
                 name=oracle_tc_chapter[tc_id].name,
                 ext_ext=oracle_tc_chapter[tc_id].exam,
                 str=oracle_tc_chapter[tc_id].sort,
-                tpr_tpr=oracle_tc_chapter[tc_id].tp_tp_id
-            )
+                tpr_tpr=oracle_tc_chapter[tc_id].tp_tp_id,
+                tpdl_tpdl=tpdl_id
+            ).save()
 
         # Создаем TC_TIME
         oracle_tc_time = get_tc_time(tc_id[0])
         totc_id = list(oracle_tc_time.keys())[0]
 
         if not model_contains(model=TcTimes, key="tim_id", values=totc_id[0]):
-            tc_time = TcTimes.create(
-                tim_id=totc_id[0],
+            tc_time = TcTimes(
+                totc_id=totc_id[0],
                 ctl_count=oracle_tc_time[totc_id].val_check,
                 tch_tch=tc_id[0],
                 val=oracle_tc_time[totc_id].value,
                 wt_wot=list(work_type.keys())[0]
-            )
+            ).save()
 
         # Создаем TEACH_PROGRAM
         oracle_teach_program = get_teach_program(oracle_tc_chapter[tc_id].tp_tp_id)
@@ -115,14 +158,15 @@ if __name__ == '__main__':
             info="dis_group loading"
         ).save()
 
-        # Создаем DGR_PERIOD
-        dgr_period = DgrPeriods(
-            sgr_sgr=stu_group.sgr_id,
-            tch_tch=tpd_chapter.tch_id,
-            ver_ver=version.ver_id,
-            #div_div=
-            #typ_typ=
-        ).save()
+        # Создаем DGR_PERIOD на каждый ty_period, в котором обучается группа
+        for typ_id in get_ty_period_range(key[0]):
+            dgr_period = DgrPeriods(
+                sgr_sgr=stu_group.sgr_id,
+                tch_tch=tpd_chapter.tch_id,
+                ver_ver=version.ver_id,
+                #div_div=
+                typ_typ=typ_id
+            ).save()
 
         # Созадем GROUP_WORKS
         group_work = GroupWorks(
@@ -130,15 +174,6 @@ if __name__ == '__main__':
             wt_wot=list(work_type.keys())[0]
         ).save()
 
-        # Создаем GROUP_FACULTY
-        group_faculty = GroupFaculties(
-            efo_efo=dis_studies[dds_id].foe_foe_id,
-            stu_count=get_count_of_students(key[0]),
-            num_course=get_num_of_course(key[0]),
-            sgr_sgr=stu_group.sgr_id,
-            #div_div=
-            #ele_ele=
-        )
 
 
 
