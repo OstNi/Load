@@ -15,6 +15,40 @@ _init_logger('load')
 logger = logging.getLogger('load.main')
 
 
+def get_group_faculty_info(pr_id: int) -> dict:
+    """
+    Получаем DIVISION, EDUCATION_FORM and
+    :param pr_id: id личной записи студента
+    :return: dict{"div_id": value, "foe_id": velue}
+    """
+    add_field = [("div_id", int), ("foe_id", int), ("edu_lvl", int)]
+    select = "ffd.div_div_id, ffs.foe_foe_id, tos.TOS_ID, table_aliace.*"
+
+    where = ",ffs_for_divs ffd " \
+            ",formeducs_for_spec ffs " \
+            ",specs s " \
+            ",type_of_ses tos" \
+            "where table_aliace.ffd_ffd_id=ffd_id " \
+            "and ffd.ffs_ffs_id=ffs_id " \
+            f"AND table_aliace.PR_ID = {pr_id}" \
+            "AND s.SP_ID = ffs.SP_SP_ID " \
+            "AND tos.tos_id = s.TOS_TOS_ID "
+
+    info = create_sql_table(table_name="personal_records", select=select, where=where, add_fields=add_field)
+
+    return {"div_id": info[0].div_id, "foe_id": info[0].foe_id, "edu_lvl": info[0].edu_lvl}
+
+
+def get_tpdl(tpdl_id: int) -> dict:
+    """
+    Схема доставки с id = tpdl_id
+    :param tpdl_id: id схемы достваки
+    :return: TP_DELIVERIES: dict[tpdl_id] = dataclass(поле таблицы: значение)
+    """
+    where = f" WHERE table_aliace.tpdl_id = {tpdl_id}"
+    return get_table(table_name="TP_DELIVERIES", where=where)
+
+
 def get_num_of_course(dgr_id: int) -> int:
     """
     :param dgr_id: id группы
@@ -132,7 +166,7 @@ def _get_teach_plan_id(pr_id: int) -> int:
     return create_sql_table(table_name='TP_FOR_STUDENTS', where=where)[0].tpl_tp_id
 
 
-def _get_ty_period(dgr_id: int) -> list[int]:
+def get_ty_period_range(dgr_id: int) -> list[int]:
     """
     :param dgr_id: id dis_group
     :return: список ty_periods от начала дисциплины до конца
@@ -262,9 +296,9 @@ def checker(dgr_id: int, lst: list[list[int]]) -> bool:
     :param lst: список с парами (id личной записи студента, id схемы доставки)
     :return: True - нагрузка одинаковая / False - нагрузка разная
     """
-    ty_periods: list[int] = _get_ty_period(dgr_id)  # узнаем учебные периоды группы
+    ty_periods: list[int] = get_ty_period_range(dgr_id)  # узнаем учебные периоды группы
     terms: dict = {}     # key = tpdl_id, value = [terms]
-    ch_value: dict = {} # key = ty_period value = [нагрузки по схемам доставки на этот учебный период]
+    ch_value: dict = {}  # key = ty_period value = [нагрузки по схемам доставки на этот учебный период]
 
     # заполнение словаря terms
     for i in range(len(lst)):
