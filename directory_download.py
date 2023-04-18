@@ -86,16 +86,31 @@ def division_load():
     """
     Выгрузка всех divisions
     """
-    oracle_division = get_table(table_name="DIVISIONS")
+    oracle_division = create_sql_table(table_name="DIVISIONS")
     for key, value in oracle_division.items():
-        if not model_contains(model=Divisions, key="div_id", values=key[0]):
-            Divisions.create(
-                div_id=key[0],
-                div_div_id=value.div_div_id,
-                name=value.div_office_title,
-                short=value.div_short_title,
-                #chair
-                #faculty
+        if value.bch_bch_id in (1, 3) and value.kod_id in (2, 3):
+            if not model_contains(model=Divisions, key="div_id", values=value.div_id):
+                Divisions.create(
+                    div_id=value.div_id,
+                    div_div_id=value.div_div_id,
+                    name=value.div_office_title,
+                    short=value.div_short_title,
+                    chair="y" if value.kod_id == 3 and value.div_is_spec in ("n", "y") else "n",
+                    faculty="y" if value.kod_id in (2, 3) and value.div_is_spec == "y" else "n"
+                )
+
+
+def teach_porg_type_load():
+    """
+    Выгрузка TEACH_PROG_TYPE
+    """
+    oracle_teach_prog_type = get_table(table_name="TYPE_OF_TEACH_PROGS")
+    for key, value in oracle_teach_prog_type.items():
+        if not model_contains(model=TeachProgType, key="tpt_id", values=key[0]):
+            TeachProgType.create(
+                tpt_id=key[0],
+                tp_type=value.tp_type,
+                type_info=value.type_info
             )
 
 
@@ -105,6 +120,8 @@ def main():
     education_form_load()
     work_type_load()
     teach_year_load()
+    division_load()
+    teach_porg_type_load()
 
 
 if __name__ == "__main__":
