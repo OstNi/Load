@@ -100,17 +100,21 @@ def get_tpd_from_tpdl(tpdl_id: int) -> dict:
     :param tpdl_id: id схемы доставки
     :return: TPD_CHAPTERS: dict[tc_id] = dataclass(поле таблицы: значение)
     """
-    where = f' WHERE table_aliace.tpdl_tp_dl_id = {tpdl_id}'
+    where = f' WHERE table_aliace.tpdl_tp_dl_id = {tpdl_id}' \
+            ' ORDER BY table_aliace.tc_id'
     return get_table('TPD_CHAPTERS', where=where)
 
 
-def get_tc_time(tc_id: int) -> dict:
+def get_tc_time(tc_id: int, tow_id: int) -> dict:
     """
     TIME_OF_TPD_CHAPTER по tc_id
     :param tc_id: id tpd_chapter
+    :param tow_id: id type_of_work
     :return: TIME_OF_TPD_CHAPTERS: dict[totc_id] = dataclass(поле таблицы: значение)
     """
-    where = f"WHERE table_aliace.tc_tc_id = {tc_id}"
+    where = f"WHERE table_aliace.tc_tc_id = {tc_id} " \
+            f"AND table_aliace.tow_tow_id = {tow_id}"
+
     return get_table(table_name="TIME_OF_TPD_CHAPTERS", where=where)
 
 
@@ -279,14 +283,21 @@ def type_of_study(study: type) -> str:
     return 'дпв'        # дисциплина по выбору
 
 
-def type_of_work(dgr_id: int) -> dict:
+def type_of_work(dgr_id: int) -> int:
+    """
+    Получаем тип работы для группы
+    :param dgr_id: id группы
+    :return: id типа работы
+    """
     where = ' WHERE EXISTS (' \
             'SELECT * ' \
             'FROM DGR_WORKS dw ' \
             f'WHERE dw.DGR_DGR_ID = {dgr_id} ' \
             'AND dw.TOW_TOW_ID  = table_aliace.TOW_ID )'
 
-    return get_table('TYPE_OF_WORKS', where=where)
+    oracle_type_of_work = get_table('TYPE_OF_WORKS', where=where)
+    tow_id = list(oracle_type_of_work.keys())[0]
+    return tow_id
 
 
 def checker(dgr_id: int, lst: list[list[int]]) -> bool:
