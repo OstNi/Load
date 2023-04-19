@@ -26,9 +26,9 @@ def procedure(procedure_name: str, args: dict = None, out_args: list[str] = None
     """
     Вызов pl/sql процедуру
     :param procedure_name:  имя процедуры
-    :param args:  словарь с аргуметами и их значенями
+    :param args:  словарь с аргументами и их значениями
     :param out_args:  список с именами OUT-аргументов
-    :return: значения OUT агруметов
+    :return: значения OUT аргументов
     """
 
     # подключение к базе oracle
@@ -38,7 +38,7 @@ def procedure(procedure_name: str, args: dict = None, out_args: list[str] = None
             dsn=connect_setting_oracle['DSN']
     ) as conn:
         cursor = conn.cursor()  # создаем курсор
-        args_list = list(args.values())     # создаем список с именами парамметров процедуры
+        args_list = list(args.values())     # создаем список с именами параметров процедуры
         result = cursor.callproc(procedure_name, args_list)     # вызываем процу и записываем результат
 
     # обнавляем входные значения
