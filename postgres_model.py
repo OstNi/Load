@@ -47,6 +47,7 @@ class Divisions(BaseModel):
 class StuGroups(BaseModel):
     sgr_id = AutoField(column_name="sgr_id")
     dgr_id = IntegerField(null=True)
+    sup_id = IntegerField(null=True)
     info = CharField(null=True)
     name = CharField(unique=True)
     sgr_sgr_id = ForeignKeyField(column_name='sgr_sgr_id', field='sgr_id', model='self', null=True)
