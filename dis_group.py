@@ -11,7 +11,6 @@ import logging
 """
 
 # инициализируем лог
-_init_logger('load')
 logger = logging.getLogger('load.main')
 
 
@@ -27,10 +26,10 @@ def get_group_faculty_info(pr_id: int) -> dict:
     where = ",ffs_for_divs ffd " \
             ",formeducs_for_spec ffs " \
             ",specs s " \
-            ",type_of_ses tos" \
+            ",type_of_ses tos " \
             "where table_aliace.ffd_ffd_id=ffd_id " \
             "and ffd.ffs_ffs_id=ffs_id " \
-            f"AND table_aliace.PR_ID = {pr_id}" \
+            f"AND table_aliace.PR_ID = {pr_id} " \
             "AND s.SP_ID = ffs.SP_SP_ID " \
             "AND tos.tos_id = s.TOS_TOS_ID "
 
@@ -100,7 +99,7 @@ def get_tpd_from_tpdl(tpdl_id: int) -> dict:
     :param tpdl_id: id схемы доставки
     :return: TPD_CHAPTERS: dict[tc_id] = dataclass(поле таблицы: значение)
     """
-    where = f' WHERE table_aliace.tpdl_tp_dl_id = {tpdl_id}' \
+    where = f' WHERE table_aliace.tpdl_tpdl_id = {tpdl_id}' \
             ' ORDER BY table_aliace.tc_id'
     return get_table('TPD_CHAPTERS', where=where)
 
@@ -192,7 +191,7 @@ def get_ty_period_range(dgr_id: int) -> list[int]:
     return range_ty_period(start, stop)
 
 
-def get_tpdl(pr_id: int, dis_id: int) -> int | None:
+def get_tpdl_use_pr_dis(pr_id: int, dis_id: int) -> int | None:
     """
     Получаем схему доставки для дисциплины у студента
     :param pr_id: id личной записи студента
@@ -297,7 +296,7 @@ def type_of_work(dgr_id: int) -> int:
 
     oracle_type_of_work = get_table('TYPE_OF_WORKS', where=where)
     tow_id = list(oracle_type_of_work.keys())[0]
-    return tow_id
+    return tow_id[0]
 
 
 def checker(dgr_id: int, lst: list[list[int]]) -> bool:
