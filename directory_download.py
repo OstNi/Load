@@ -114,6 +114,25 @@ def teach_porg_type_load():
             )
 
 
+def ty_period_load():
+    """
+    Выгрузка TY_PERIODS
+    """
+    select = " trm_pkg.tyn_sname(num), table_aliace.* "
+    add_field = [("period_type", str)]
+    oracle_ty_period = get_table(table_name="TY_PERIODS", select=select, add_fields=add_field)
+    for key, value in oracle_ty_period.items():
+        if not model_contains(model=TyPeriods, key="typ_id", values=key[0]):
+            TyPeriods.create(
+                typ_id=key[0],
+                num=value.num,
+                period_type=value.period_type,
+                ty_ty=value.ty_ty_id,
+                start_date=value.start_date,
+                end_date=value.end_date
+            )
+
+
 def main():
     exam_type_load()
     edu_levels_load()
@@ -122,6 +141,7 @@ def main():
     teach_year_load()
     division_load()
     teach_porg_type_load()
+    ty_period_load()
 
 
 if __name__ == "__main__":
