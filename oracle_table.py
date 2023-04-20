@@ -1,3 +1,4 @@
+from typing import Any
 from setting import connect_setting_oracle, path
 from sqlalchemy import create_engine, text, inspect, Engine
 from dataclasses import make_dataclass
@@ -22,7 +23,28 @@ ENGINE_PATH: str = (
 )
 
 
-def procedure(procedure_name: str, args: dict = None, out_args: list[str] = None) -> list:
+def call_oracle_function(function_name: str, args: dict) -> Any:
+    """
+    Вызоп PL/SQL функции
+    :param function_name: имя pl/sql функции
+    :param args: аргументы функции
+    :return: результат функции
+    """
+
+    # подключение к базе oracle
+    with cx_Oracle.connect(
+            user=connect_setting_oracle['USERNAME'],
+            password=connect_setting_oracle['PASSWORD'],
+            dsn=connect_setting_oracle['DSN']
+    ) as conn:
+        cursor = conn.cursor()  # создаем курсор
+        args_list = list(args.values())  # создаем список с именами параметров функции
+        result = cursor.callfunc(function_name, cx_Oracle.NUMBER, args_list)  # вызываем функцию и записываем результат
+
+    return result
+
+
+def call_oracle_procedure(procedure_name: str, args: dict = None, out_args: list[str] = None) -> list:
     """
     Вызов pl/sql процедуру
     :param procedure_name:  имя процедуры
