@@ -12,8 +12,7 @@ import logging
 """
 
 # инициализируем лог
-_init_logger('dis_loading')
-logger = logging.getLogger('dis_load.main')
+logger = _init_logger('dis_loading', 'dis_load.log')
 
 
 def create_stu_group(dis_group: dataclass, dgr_id: int) -> StuGroups | None:
@@ -343,60 +342,61 @@ def main():
             continue
 
         with database.atomic() as transaction:
-            ok = True   # чекер транзакции. Если все ок - сохраненяем в базу, иначе - откатываем
+            try:
+                # Создаем Disciplines
+                create_discipline(dis_studies[dds_id].dis_dis_id)
 
-            # Создаем Disciplines
-            create_discipline(dis_studies[dds_id].dis_dis_id)
+                # Получаем и создаем TpDelivery исходя из типа дисциплины
+                # проверка нужна на случай, если учебная нагрузка среди студентов различна,
+                # в этом случае, мы просто не создаем группу
+                if not(tp_delivery := choice_of_branch(
+                        study_type=type_of_study(dis_studies[dds_id]),
+                        dis_study=dis_studies[dds_id],
+                        dis_groups=dis_groups,
+                        dgr_id=key)):
+                    raise Exception("TpDeliveries не была создана")
 
-            # Получаем и создаем TpDelivery исходя из типа дисциплины
-            # проверка нужна на случай, если учебная нагрузка среди студентов различна,
-            # в этом случае, мы просто не создаем группу
-            if not(tp_delivery := choice_of_branch(
-                    study_type=type_of_study(dis_studies[dds_id]),
-                    dis_study=dis_studies[dds_id],
-                    dis_groups=dis_groups,
-                    dgr_id=key)):
-                ok = False
+                # Создаем STU_GROUP если группа уже создана, то пропускаем
+                if not (stu_group := create_stu_group(dis_groups[key], key[0])):
+                    raise Exception("StuGroup уже создана")
 
-            # Создаем STU_GROUP если группа уже создана, то пропускаем
-            if not (stu_group := create_stu_group(dis_groups[key], key[0])):
-                ok = False
+                # Узнаем тип работ у группы
+                work_type: int = type_of_work(key[0])
 
-            # Узнаем тип работ у группы
-            work_type: int = type_of_work(key[0])
+                # Создаем TC
+                tpr_chapters = create_tpr_chapters(tp_delivery.tpdl_id)
 
-            # Создаем TC
-            tpr_chapters = create_tpr_chapters(tp_delivery.tpdl_id)
+                # Создаем DGR_PERIOD на каждый ty_period, в котором обучается группа
+                for typ_id, tpr_chapter in zip(get_ty_period_range(key[0]), tpr_chapters):
 
-            # Создаем DGR_PERIOD на каждый ty_period, в котором обучается группа
-            for typ_id, tpr_chapter in zip(get_ty_period_range(key[0]), tpr_chapters):
+                    # Создаем DGR_PERIODS
+                    dgr_period = DgrPeriods(
+                        sgr_sgr=stu_group.sgr_id,
+                        tch_tch=tpr_chapter.tch_id,
+                        ver_ver=version.ver_id,
+                        div_div=2221,       # все весим на ПГНИУ
+                        typ_typ=typ_id
+                    )
 
-                # Создаем DGR_PERIODS
-                dgr_period = DgrPeriods(
-                    sgr_sgr=stu_group.sgr_id,
-                    tch_tch=tpr_chapter.tch_id,
-                    ver_ver=version.ver_id,
-                    div_div=2221,       # все весим на ПГНИУ
-                    typ_typ=typ_id
-                )
+                    dgr_period.save()
 
-                dgr_period.save()
+                    # Вызываем TyPeriod, чтобы узнать TeachYears (ty_id)
+                    ty_period = TyPeriods.get(typ_id=typ_id)
 
-                # Вызываем TyPeriod, чтобы узнать TeachYears (ty_id)
-                ty_period = TyPeriods.get(typ_id=typ_id)
+                    # Создаем TC_TIME
+                    tc_time = create_tc_time(tpr_chapter.tc_id, work_type, ty_period.ty_ty.ty_id)
 
-                # Создаем TC_TIME
-                tc_time = create_tc_time(tpr_chapter.tc_id, work_type, ty_period.ty_ty.ty_id)
+                # Создаем GROUP_WORKS
+                group_work = create_group_work(stu_group.sgr_id, work_type)
 
-            # Создаем GROUP_WORKS
-            group_work = create_group_work(stu_group.sgr_id, work_type)
+                # Создаем GROUP_FACULTY
+                create_group_faculty(dis_groups, key, stu_group.sgr_id)
 
-            # Создаем GROUP_FACULTY
-            create_group_faculty(dis_groups, key, stu_group.sgr_id)
-
-            if ok:
+                logger.debug(f"Success: для DIS_GROUP {key[0]} была успешно создана")
                 transaction.commit()
-            else:
+
+            except Exception as e:
+                logger.debug(f'ERROR: {e} для DIS_GROUP с dgr_id {key[0]}')
                 transaction.rollback()
 
 
