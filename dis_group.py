@@ -3,14 +3,14 @@ from oracle_table import get_table, create_sql_table
 from additions import range_ty_period
 from math import ceil
 from oracle_table import call_oracle_function
-import logging
+from log import _init_logger
 
 """
 Функции для выгрузки данных со стороны DIS_GROUP
 """
 
 # инициализируем лог
-logger = logging.getLogger('load.main')
+logger = _init_logger(name="dis_group", filename="dis_group.log")
 
 
 def get_group_faculty_info(pr_id: int) -> dict:
@@ -368,6 +368,7 @@ def get_div_for_dgr(ty_id: int, bch_id: int, dis_id: int) -> int | None:
 
     # указать соответсвие branch.bch_id записи staff_divisions.sdiv_id
     s_div = call_oracle_function(function_name="ffd_pkg.BCH_TO_SDIV", args={"P_BCH_ID": bch_id})
+    logger.debug(f"{dis_id=}, {s_div=}, {charge_ds=}")
 
     # закрепление по приказу
     return call_oracle_function(function_name="dis_for_div",

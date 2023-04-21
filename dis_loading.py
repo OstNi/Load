@@ -107,7 +107,7 @@ def create_tc_time(tc_id: int, ty_id: int) -> list:
     oracle_tc_time = get_tc_time(tc_id)
     tc_time_lst = []
 
-    for totc_id, value in oracle_tc_time:
+    for totc_id, value in oracle_tc_time.items():
 
         # аргументы для oracle функции, которая сичтает количество точек контрроля
         agrs_for_func = {
@@ -333,7 +333,7 @@ def dpv_branch(dis_study: dataclass, dis_groups: dataclass, dgr_id: tuple) -> Tp
 def main():
     logger.debug("---START OF LOADING---")
     # Создаем VERSION
-    version = create_version()
+    #version = create_version()
 
     # реализация логики выгрузки
     dis_groups = get_dis_groups()   # выгружаем дис группы
@@ -372,18 +372,18 @@ def main():
                     # Вызываем TyPeriod, чтобы узнать TeachYears (ty_id)
                     ty_period = TyPeriods.get(typ_id=typ_id)
 
-                    div_for_dgr = get_div_for_dgr(
-                        ty_id=ty_period.ty_ty.ty_id,
-                        bch_id=dis_studies[dds_id].bch_bch_id,
-                        dis_id=dis_studies[dds_id].dis_dis_id
-                    )
+                    # div_for_dgr = get_div_for_dgr(
+                    #     ty_id=ty_period.ty_ty.ty_id,
+                    #     bch_id=dis_studies[dds_id].bch_bch_id,
+                    #     dis_id=dis_studies[dds_id].dis_dis_id
+                    # )
 
                     # Создаем DGR_PERIODS
                     dgr_period = DgrPeriods.create(
                         sgr_sgr=stu_group.sgr_id,
                         tch_tch=tpr_chapter.tch_id,
                         ver_ver=version.ver_id,
-                        div_div=div_for_dgr if div_for_dgr else 2221,  # если кафедрру нет, то весим на ПГНИУ
+                        div_div=2221,  # если кафедрру нет, то весим на ПГНИУ
                         typ_typ=typ_id
                     )
 
@@ -397,7 +397,7 @@ def main():
                 # Создаем GROUP_FACULTY
                 create_group_faculty(dis_groups, key, stu_group.sgr_id)
 
-                logger.debug(f"Success: для DIS_GROUP {key[0]} была успешно создана")
+                logger.debug(f"SUCCESS: для DIS_GROUP {key[0]} была успешно создана")
                 transaction.commit()
 
             except Exception as e:
