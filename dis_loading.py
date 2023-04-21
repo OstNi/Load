@@ -97,38 +97,41 @@ def create_tpr_chapters(tpdl_id: int) -> list:
     return tpr_chapters
 
 
-def create_tc_time(tc_id: int, type_of_work_id: int, ty_id: int) -> TcTimes:
+def create_tc_time(tc_id: int, ty_id: int) -> list:
     """
     Создание модели TcTimes postgres_model.py
     :param tc_id: id учебного раздела
-    :param type_of_work_id: id типа работ
     :param ty_id: id учебного года
     :return: объект класса TcTimes postgres_model.py
     """
-    oracle_tc_time = get_tc_time(tc_id, type_of_work_id)
-    totc_id = list(oracle_tc_time.keys())[0]
+    oracle_tc_time = get_tc_time(tc_id)
+    tc_time_lst = []
 
-    # аргументы для oracle функции, котоорая сичтает количество точек контрроля
-    agrs_for_func = {
-        "P_TC_ID": tc_id,
-        "P_TOW_ID": type_of_work_id,
-        "P_TY_ID": ty_id
-    }
+    for totc_id, value in oracle_tc_time:
 
-    count_of_ctl = call_oracle_function("tpd_t.GET_CTL_RPNT_CNT", args=agrs_for_func)
+        # аргументы для oracle функции, которая сичтает количество точек контрроля
+        agrs_for_func = {
+            "P_TC_ID": tc_id,
+            "P_TOW_ID": value.tow_tow_id,
+            "P_TY_ID": ty_id
+        }
 
-    if not model_contains(model=TcTimes, key="totc_id", values=totc_id[0]):
-        new_tc_time = TcTimes.create(
-            totc_id=totc_id[0],
-            ctl_count=count_of_ctl if count_of_ctl else 0,
-            tch_tch=TprChapters.get(tc_id=tc_id).tch_id,
-            val=oracle_tc_time[totc_id].value,
-            wt_wot=type_of_work_id
-        )
+        count_of_ctl = call_oracle_function("tpd_t.GET_CTL_RPNT_CNT", args=agrs_for_func)
 
-        return new_tc_time
+        if not model_contains(model=TcTimes, key="totc_id", values=totc_id[0]):
+            new_tc_time = TcTimes.create(
+                totc_id=totc_id[0],
+                ctl_count=count_of_ctl if count_of_ctl else 0,
+                tch_tch=TprChapters.get(tc_id=tc_id).tch_id,
+                val=value.value,
+                wt_wot=value.tow_tow_id
+            )
 
-    return TcTimes.get(totc_id=totc_id[0])
+            tc_time_lst.append(new_tc_time)
+        else:
+            tc_time_lst.append(TcTimes.get(totc_id=totc_id[0]))
+
+    return tc_time_lst
 
 
 def create_teach_program(tp_id: int) -> TeachPrograms:
@@ -328,7 +331,7 @@ def dpv_branch(dis_study: dataclass, dis_groups: dataclass, dgr_id: tuple) -> Tp
 
 
 def main():
-
+    logger.debug("---START OF LOADING---")
     # Создаем VERSION
     version = create_version()
 
@@ -360,17 +363,14 @@ def main():
                 if not (stu_group := create_stu_group(dis_groups[key], key[0])):
                     raise Exception("StuGroup уже создана")
 
-                # Узнаем тип работ у группы
-                work_type: int = type_of_work(key[0])
-
-                # Создаем TC
+                # Создаем TPD_CHAPTERS
                 tpr_chapters = create_tpr_chapters(tp_delivery.tpdl_id)
 
                 # Создаем DGR_PERIOD на каждый ty_period, в котором обучается группа
                 for typ_id, tpr_chapter in zip(get_ty_period_range(key[0]), tpr_chapters):
 
                     # Создаем DGR_PERIODS
-                    dgr_period = DgrPeriods(
+                    dgr_period = DgrPeriods.create(
                         sgr_sgr=stu_group.sgr_id,
                         tch_tch=tpr_chapter.tch_id,
                         ver_ver=version.ver_id,
@@ -378,16 +378,15 @@ def main():
                         typ_typ=typ_id
                     )
 
-                    dgr_period.save()
-
                     # Вызываем TyPeriod, чтобы узнать TeachYears (ty_id)
                     ty_period = TyPeriods.get(typ_id=typ_id)
 
                     # Создаем TC_TIME
-                    tc_time = create_tc_time(tpr_chapter.tc_id, work_type, ty_period.ty_ty.ty_id)
+                    tc_time = create_tc_time(tpr_chapter.tc_id, ty_period.ty_ty.ty_id)
 
                 # Создаем GROUP_WORKS
-                group_work = create_group_work(stu_group.sgr_id, work_type)
+                for tow_id in type_of_work(key[0]):
+                    group_work = create_group_work(stu_group.sgr_id, tow_id)
 
                 # Создаем GROUP_FACULTY
                 create_group_faculty(dis_groups, key, stu_group.sgr_id)
