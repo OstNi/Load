@@ -369,17 +369,23 @@ def main():
                 # Создаем DGR_PERIOD на каждый ty_period, в котором обучается группа
                 for typ_id, tpr_chapter in zip(get_ty_period_range(key[0]), tpr_chapters):
 
+                    # Вызываем TyPeriod, чтобы узнать TeachYears (ty_id)
+                    ty_period = TyPeriods.get(typ_id=typ_id)
+
+                    div_for_dgr = get_div_for_dgr(
+                        ty_id=ty_period.ty_ty.ty_id,
+                        bch_id=dis_studies[dds_id].bch_bch_id,
+                        dis_id=dis_studies[dds_id].dis_dis_id
+                    )
+
                     # Создаем DGR_PERIODS
                     dgr_period = DgrPeriods.create(
                         sgr_sgr=stu_group.sgr_id,
                         tch_tch=tpr_chapter.tch_id,
                         ver_ver=version.ver_id,
-                        div_div=2221,       # все весим на ПГНИУ
+                        div_div=div_for_dgr if div_for_dgr else 2221,  # если кафедрру нет, то весим на ПГНИУ
                         typ_typ=typ_id
                     )
-
-                    # Вызываем TyPeriod, чтобы узнать TeachYears (ty_id)
-                    ty_period = TyPeriods.get(typ_id=typ_id)
 
                     # Создаем TC_TIME
                     tc_time = create_tc_time(tpr_chapter.tc_id, ty_period.ty_ty.ty_id)

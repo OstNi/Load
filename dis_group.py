@@ -5,7 +5,6 @@ from math import ceil
 from oracle_table import call_oracle_function
 import logging
 
-
 """
 Функции для выгрузки данных со стороны DIS_GROUP
 """
@@ -53,7 +52,7 @@ def get_num_of_course(dgr_id: int) -> int:
     :param dgr_id: id группы
     :return: номер курса обучения
     """
-    pr_lst = get_pr_list(dgr_id)    # список студентов группы
+    pr_lst = get_pr_list(dgr_id)  # список студентов группы
 
     # берем первого студента и узнаем номер текущего триметра
     where = "WHERE EXISTS ( " \
@@ -65,7 +64,7 @@ def get_num_of_course(dgr_id: int) -> int:
     tfs = get_table(table_name="TP_FOR_STUDENTS", where=where)
     tfs_id = list(tfs.keys())[0]
 
-    return ceil(tfs[tfs_id].current_term / 3)   # округляем в большую сторону (текущий трим / 3)
+    return ceil(tfs[tfs_id].current_term / 3)  # округляем в большую сторону (текущий трим / 3)
 
 
 def get_count_of_students(dgr_id: int) -> int:
@@ -273,11 +272,11 @@ def type_of_study(study: type) -> str:
     :return: тип дисциплины
     """
     if study.tpdl_tpdl_id:
-        return 'эл'     # электив
+        return 'эл'  # электив
     if study.fcr_fcr_id:
-        return 'фак'    # факультатив
+        return 'фак'  # факультатив
 
-    return 'дпв'        # дисциплина по выбору
+    return 'дпв'  # дисциплина по выбору
 
 
 def type_of_work(dgr_id: int) -> list[int]:
@@ -304,7 +303,7 @@ def checker(dgr_id: int, lst: list[list[int]]) -> bool:
     :return: True - нагрузка одинаковая / False - нагрузка разная
     """
     ty_periods: list[int] = get_ty_period_range(dgr_id)  # узнаем учебные периоды группы
-    terms: dict = {}     # key = tpdl_id, value = [terms]
+    terms: dict = {}  # key = tpdl_id, value = [terms]
     ch_value: dict = {}  # key = ty_period value = [нагрузки по схемам доставки на этот учебный период]
 
     # заполнение словаря terms
@@ -356,8 +355,24 @@ def checker(dgr_id: int, lst: list[list[int]]) -> bool:
     return True
 
 
+def get_div_for_dgr(ty_id: int, bch_id: int, dis_id: int) -> int | None:
+    """
+    Кафедра для DGR_PERIOD
+    :param ty_id: учебный год
+    :param bch_id: id филиала
+    :param dis_id: id дисциплины
+    :return: id кафедры, за которой закреплена дисциплина
+    """
+    # дата на которую смотрим закрепление специальности,дисциплины
+    charge_ds = call_oracle_function(function_name="charge_pkg.get_charge_point_ds", args={"R_TY_ID": ty_id})
 
+    # указать соответсвие branch.bch_id записи staff_divisions.sdiv_id
+    s_div = call_oracle_function(function_name="ffd_pkg.BCH_TO_SDIV", args={"P_BCH_ID": bch_id})
 
-
-
-
+    # закрепление по приказу
+    return call_oracle_function(function_name="dis_for_div",
+                                args={
+                                    "DIS_ID": dis_id,
+                                    "S_DIV_ID": s_div,
+                                    "CHARGE_DS": charge_ds}
+                                )
