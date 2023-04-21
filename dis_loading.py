@@ -37,13 +37,12 @@ def create_stu_group(dis_group: dataclass, dgr_id: int) -> StuGroups | None:
         else:
             sgr_id = None
 
-        new_group = StuGroups(
+        new_group = StuGroups.create(
             name=dis_group.fullname,
             dgr_id=dgr_id,
             sgr_sgr_id=sgr_id,
         )
 
-        new_group.save()
         return new_group
 
     return None
@@ -84,7 +83,7 @@ def create_tpr_chapters(tpdl_id: int) -> list:
 
     for tc_id, value in oracle_tc_chapter.items():
         if not model_contains(model=TprChapters, key="tc_id", values=tc_id[0]):
-            new_chapter = TprChapters(
+            new_chapter = TprChapters.create(
                 tc_id=tc_id[0],
                 name=value.name,
                 ext_ext=value.exam,
@@ -93,7 +92,6 @@ def create_tpr_chapters(tpdl_id: int) -> list:
                 tpdl_tpdl=tpdl_id
             )
             tpr_chapters.append(new_chapter)
-            new_chapter.save()
         else:
             tpr_chapters.append(TprChapters.get(tc_id=tc_id[0]))
 
@@ -121,7 +119,7 @@ def create_tc_time(tc_id: int, type_of_work_id: int, ty_id: int) -> TcTimes:
     count_of_ctl = call_oracle_function("tpd_t.GET_CTL_RPNT_CNT", args=agrs_for_func)
 
     if not model_contains(model=TcTimes, key="totc_id", values=totc_id[0]):
-        new_tc_time = TcTimes(
+        new_tc_time = TcTimes.create(
             totc_id=totc_id[0],
             ctl_count=count_of_ctl if count_of_ctl else 0,
             tch_tch=TprChapters.get(tc_id=tc_id).tch_id,
@@ -129,7 +127,6 @@ def create_tc_time(tc_id: int, type_of_work_id: int, ty_id: int) -> TcTimes:
             wt_wot=type_of_work_id
         )
 
-        new_tc_time.save()
         return new_tc_time
 
     return TcTimes.get(totc_id=totc_id[0])
@@ -183,12 +180,11 @@ def create_version() -> Versions:
     Создание модели Version postgres_model.py
     :return: объект класса Version postgres_model.py
     """
-    new_version = Versions(
+    new_version = Versions.create(
         calc_date=datetime.now(),
         info="dis_group loading"
     )
 
-    new_version.save()
     return new_version
 
 
@@ -199,12 +195,11 @@ def create_group_work(sgr_id: int, type_of_work_id: int) -> GroupWorks:
     :param type_of_work_id: id типа работ
     :return:
     """
-    new_group_work = GroupWorks(
+    new_group_work = GroupWorks.create(
         sgr_sgr=sgr_id,
         wt_wot=type_of_work_id
     )
 
-    new_group_work.save()
     return new_group_work
 
 
@@ -234,7 +229,7 @@ def create_group_faculty(dis_groups: dataclass, dgr_id: tuple, sgr_id: int) -> N
 
     for info, value in dif_group_fuculty.items():
         # Создаем GROUP_FACULTY
-        new_group_faculty = GroupFaculties(
+        new_group_faculty = GroupFaculties.create(
             efo_efo=info[1],
             stu_count=value,
             num_course=get_num_of_course(dgr_id[0]),
@@ -242,7 +237,6 @@ def create_group_faculty(dis_groups: dataclass, dgr_id: tuple, sgr_id: int) -> N
             div_div=info[0],
             ele_ele=info[2]
         )
-        new_group_faculty.save()
 
 
 def is_low_dgr_group(dis_groups: dict, dgr_id: int) -> bool:
@@ -348,52 +342,62 @@ def main():
         if dis_studies[dds_id].foe_foe_id != 1:     # если это не очная форма обучения, пропускаем
             continue
 
-        # Создаем Disciplines
-        create_discipline(dis_studies[dds_id].dis_dis_id)
+        with database.atomic() as transaction:
+            ok = True   # чекер транзакции. Если все ок - сохраненяем в базу, иначе - откатываем
 
-        # Получаем и создаем TpDelivery исходя из типа дисциплины
-        # проверка нужна на случай, если учебная нагрузка среди студентов различна,
-        # в этом случае, мы просто не создаем группу
-        if not(tp_delivery := choice_of_branch(
-                study_type=type_of_study(dis_studies[dds_id]),
-                dis_study=dis_studies[dds_id],
-                dis_groups=dis_groups,
-                dgr_id=key)):
-            continue
+            # Создаем Disciplines
+            create_discipline(dis_studies[dds_id].dis_dis_id)
 
-        # Создаем STU_GROUP если группа уже создана, то пропускаем
-        if not (stu_group := create_stu_group(dis_groups[key], key[0])):
-            continue
+            # Получаем и создаем TpDelivery исходя из типа дисциплины
+            # проверка нужна на случай, если учебная нагрузка среди студентов различна,
+            # в этом случае, мы просто не создаем группу
+            if not(tp_delivery := choice_of_branch(
+                    study_type=type_of_study(dis_studies[dds_id]),
+                    dis_study=dis_studies[dds_id],
+                    dis_groups=dis_groups,
+                    dgr_id=key)):
+                ok = False
 
-        # Узнаем тип работ у группы
-        work_type: int = type_of_work(key[0])
+            # Создаем STU_GROUP если группа уже создана, то пропускаем
+            if not (stu_group := create_stu_group(dis_groups[key], key[0])):
+                ok = False
 
-        # Создаем TC
-        tpr_chapters = create_tpr_chapters(tp_delivery.tpdl_id)
+            # Узнаем тип работ у группы
+            work_type: int = type_of_work(key[0])
 
-        # Создаем DGR_PERIOD на каждый ty_period, в котором обучается группа
-        for typ_id, tpr_chapter in zip(get_ty_period_range(key[0]), tpr_chapters):
+            # Создаем TC
+            tpr_chapters = create_tpr_chapters(tp_delivery.tpdl_id)
 
-            # Создаем DGR_PERIODS
-            dgr_period = DgrPeriods(
-                sgr_sgr=stu_group.sgr_id,
-                tch_tch=tpr_chapter.tch_id,
-                ver_ver=version.ver_id,
-                div_div=2619,
-                typ_typ=typ_id
-            ).save()
+            # Создаем DGR_PERIOD на каждый ty_period, в котором обучается группа
+            for typ_id, tpr_chapter in zip(get_ty_period_range(key[0]), tpr_chapters):
 
-            # Вызываем TyPeriod, чтобы узнать TeachYears (ty_id)
-            ty_period = TyPeriods.get(typ_id=typ_id)
+                # Создаем DGR_PERIODS
+                dgr_period = DgrPeriods(
+                    sgr_sgr=stu_group.sgr_id,
+                    tch_tch=tpr_chapter.tch_id,
+                    ver_ver=version.ver_id,
+                    div_div=2221,       # все весим на ПГНИУ
+                    typ_typ=typ_id
+                )
 
-            # Создаем TC_TIME
-            tc_time = create_tc_time(tpr_chapter.tc_id, work_type, ty_period.ty_ty.ty_id)
+                dgr_period.save()
 
-        # Создаем GROUP_WORKS
-        group_work = create_group_work(stu_group.sgr_id, work_type)
+                # Вызываем TyPeriod, чтобы узнать TeachYears (ty_id)
+                ty_period = TyPeriods.get(typ_id=typ_id)
 
-        # Создаем GROUP_FACULTY
-        create_group_faculty(dis_groups, key, stu_group.sgr_id)
+                # Создаем TC_TIME
+                tc_time = create_tc_time(tpr_chapter.tc_id, work_type, ty_period.ty_ty.ty_id)
+
+            # Создаем GROUP_WORKS
+            group_work = create_group_work(stu_group.sgr_id, work_type)
+
+            # Создаем GROUP_FACULTY
+            create_group_faculty(dis_groups, key, stu_group.sgr_id)
+
+            if ok:
+                transaction.commit()
+            else:
+                transaction.rollback()
 
 
 if __name__ == "__main__":

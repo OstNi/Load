@@ -2,7 +2,7 @@
 from oracle_table import get_table, create_sql_table
 from additions import range_ty_period
 from math import ceil
-from log import _init_logger
+from oracle_table import call_oracle_function
 import logging
 
 
@@ -357,7 +357,6 @@ def checker(dgr_id: int, lst: list[list[int]]) -> bool:
                 if ch_value[ty_period][row][col] != ch_value[ty_period][0][col]:
                     return False
     return True
-
 
 
 
