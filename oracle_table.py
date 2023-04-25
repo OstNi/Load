@@ -5,6 +5,9 @@ from dataclasses import make_dataclass
 import cx_Oracle
 import re
 
+from log import _init_logger
+
+logger = _init_logger(name="oracle_table", filename="oracle_table.log")
 
 """
 Подключение к Oracle и функции для выгрузки таблиц
@@ -98,7 +101,7 @@ def create_sql_table(table_name: str, select: str = None, where: str = None, add
         table = conn.execute(text(f'SELECT {select if select else "table_aliace.*"} FROM {table_name} table_aliace {where if where else ""}'))
         idx: int = 0
         for item in table:
-            out_table[idx] = meta(*[i for i in item])
+            out_table[idx] = meta(*item)
             idx += 1
 
     return out_table
@@ -126,11 +129,24 @@ def get_table(table_name: str, select: str = None, where: str = None, add_fields
 
     with engine.connect() as conn:
         table = conn.execute(text(f'SELECT {select if select else "table_aliace.*"} FROM {table_name} table_aliace {where if where else ""}'))
-        for item in table:
-            # т.к. pk может быть несколько в ключи словаря, мы добаляем все pk
-            # и закидываем в dataclass все остальные элементы
+        match pk_idx:
+            case pk_lst if len(pk_lst) == 1:
+                # если pk не составной, то просто создаем словарь
+                out_table = {item[pk_lst[0]]: meta([item[i] for i in range(len(item)) if i != pk_lst[0]]) for item in table}
 
-            out_table[tuple([item[i] for i in pk_idx])] = meta(*[item[i] for i in range(len(item)) if i not in pk_idx])
+            case pk_lst if len(pk_lst) > 1:
+                # если pk составной, то создаем словарь с составным ключем типа tuple
+                out_table = {tuple(item[x] for x in pk_lst): meta([item[i] for i in range(len(item)) if i not in pk_lst]) for item in table}
+
+            case pk_lst if len(pk_lst) == 0:
+                # если у таблицы нет явного pk, просто индексируем записи
+                idx = 0
+                for item in table:
+                    out_table[idx] = meta(*item)
+
+            case _:
+                logger.debug(f"Невалидная таблица {table_name}")
+                out_table = {}
 
     return out_table
 
