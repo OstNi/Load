@@ -23,11 +23,12 @@ ENGINE_PATH: str = (
 )
 
 
-def call_oracle_function(function_name: str, args: dict) -> Any:
+def call_oracle_function(function_name: str, args: dict, return_cx_oracle_type) -> Any:
     """
     Вызоп PL/SQL функции
     :param function_name: имя pl/sql функции
     :param args: аргументы функции
+    :param return_cx_oracle_type: тип cx_Oracle, который должен вернуться из pl/sql функции
     :return: результат функции
     """
 
@@ -39,7 +40,7 @@ def call_oracle_function(function_name: str, args: dict) -> Any:
     ) as conn:
         cursor = conn.cursor()  # создаем курсор
         args_list = list(args.values())  # создаем список с именами параметров функции
-        result = cursor.callfunc(function_name, cx_Oracle.NUMBER, args_list)  # вызываем функцию и записываем результат
+        result = cursor.callfunc(function_name, return_cx_oracle_type, args_list)  # вызываем функцию и записываем результат
 
     return result
 
@@ -237,3 +238,4 @@ def _re_attr(pk_idx: list, attr: list) -> list:
         attr.pop(idx)
 
     return attr
+

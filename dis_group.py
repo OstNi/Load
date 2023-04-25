@@ -4,6 +4,7 @@ from additions import range_ty_period
 from math import ceil
 from oracle_table import call_oracle_function
 from log import _init_logger
+import cx_Oracle
 
 """
 Функции для выгрузки данных со стороны DIS_GROUP
@@ -87,7 +88,8 @@ def get_dis_groups() -> dict:
             ',TY_PERIODS tp ' \
             'WHERE  dp.TYP_TYP_ID = tp.TYP_ID ' \
             'AND tp.ty_ty_id = 2022 ' \
-            'AND dp.DSS_DSS_ID = table_aliace.dss_dss_id)'
+            'AND dp.DSS_DSS_ID = table_aliace.dss_dss_id)' \
+            'ORDER BY table_aliace.dgr_id'
 
     return get_table(table_name='DIS_GROUPS', where=where)
 
@@ -364,16 +366,21 @@ def get_div_for_dgr(ty_id: int, bch_id: int, dis_id: int) -> int | None:
     :return: id кафедры, за которой закреплена дисциплина
     """
     # дата на которую смотрим закрепление специальности,дисциплины
-    charge_ds = call_oracle_function(function_name="charge_pkg.get_charge_point_ds", args={"R_TY_ID": ty_id})
+    charge_ds = call_oracle_function(function_name="charge_pkg.get_charge_point_ds",
+                                     args={"R_TY_ID": ty_id},
+                                     return_cx_oracle_type=cx_Oracle.Date)
 
     # указать соответсвие branch.bch_id записи staff_divisions.sdiv_id
-    s_div = call_oracle_function(function_name="ffd_pkg.BCH_TO_SDIV", args={"P_BCH_ID": bch_id})
-    logger.debug(f"{dis_id=}, {s_div=}, {charge_ds=}")
+    s_div = call_oracle_function(function_name="ffd_pkg.BCH_TO_SDIV",
+                                 args={"P_BCH_ID": bch_id},
+                                 return_cx_oracle_type=cx_Oracle.NUMBER)
+
+    logger.debug(f"{charge_ds=}, {s_div=}, {dis_id=}")
 
     # закрепление по приказу
-    return call_oracle_function(function_name="dis_for_div",
+    return call_oracle_function(function_name="calc_charge.dis_for_div",
                                 args={
                                     "DIS_ID": dis_id,
                                     "S_DIV_ID": s_div,
-                                    "CHARGE_DS": charge_ds}
-                                )
+                                    "CHARGE_DS": charge_ds},
+                                return_cx_oracle_type=cx_Oracle.NUMBER)

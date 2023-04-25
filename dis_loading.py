@@ -1,11 +1,10 @@
+import cx_Oracle
 from postgres_model import *
 from dis_group import *
-from oracle_table import call_oracle_function
 from dataclasses import dataclass
 from datetime import datetime
 from log import _init_logger
-import logging
-
+from oracle_table import *
 
 """
 Алгоритм выгрузки со стороны DIS_GROUP
@@ -41,9 +40,10 @@ def create_stu_group(dis_group: dataclass, dgr_id: int) -> StuGroups | None:
             dgr_id=dgr_id,
             sgr_sgr_id=sgr_id,
         )
-
+        logger.debug(f"CREATE: STU_GROUP {new_group.sgr_id}")
         return new_group
 
+    logger.debug("FAIL: STU_GROUP was not created")
     return None
 
 
@@ -57,7 +57,6 @@ def create_tp_delivery(tpdl_id: int) -> TpDeliveries | None:
     tpdl_key = list(oracle_tp_deliveries.keys())[0]
 
     if not model_contains(model=TpDeliveries, key="tpdl_id", values=tpdl_id):
-
         # Создаем TEACH_PROGRAM
         teach_program = create_teach_program(oracle_tp_deliveries[tpdl_key].tp_tp_id)
 
@@ -66,8 +65,10 @@ def create_tp_delivery(tpdl_id: int) -> TpDeliveries | None:
             name=oracle_tp_deliveries[tpdl_key].name,
             tpr_tpr=teach_program.tpr_id
         )
+        logger.debug(f"CREATE: TP_DELIVERY {new_delivery.tpdl_id}")
         return new_delivery
 
+    logger.debug(f"TAKE: TP_DELIVERY {tpdl_id}")
     return TpDeliveries.get(tpdl_id=tpdl_id)
 
 
@@ -91,7 +92,9 @@ def create_tpr_chapters(tpdl_id: int) -> list:
                 tpdl_tpdl=tpdl_id
             )
             tpr_chapters.append(new_chapter)
+            logger.debug(f"CREATE: TPR_CHAPTER {new_chapter.tc_id}")
         else:
+            logger.debug(f"TAKE: TPR_CHAPTER {tc_id[0]}")
             tpr_chapters.append(TprChapters.get(tc_id=tc_id[0]))
 
     return tpr_chapters
@@ -116,7 +119,9 @@ def create_tc_time(tc_id: int, ty_id: int) -> list:
             "P_TY_ID": ty_id
         }
 
-        count_of_ctl = call_oracle_function("tpd_t.GET_CTL_RPNT_CNT", args=agrs_for_func)
+        count_of_ctl = call_oracle_function("tpd_t.GET_CTL_RPNT_CNT",
+                                            args=agrs_for_func,
+                                            return_cx_oracle_type=cx_Oracle.NUMBER)
 
         if not model_contains(model=TcTimes, key="totc_id", values=totc_id[0]):
             new_tc_time = TcTimes.create(
@@ -128,7 +133,9 @@ def create_tc_time(tc_id: int, ty_id: int) -> list:
             )
 
             tc_time_lst.append(new_tc_time)
+            logger.debug(f"CREATE: TC_TIME {new_tc_time.totc_id}")
         else:
+            logger.debug(f"TAKE: TC_TIME {totc_id[0]}")
             tc_time_lst.append(TcTimes.get(totc_id=totc_id[0]))
 
     return tc_time_lst
@@ -153,8 +160,10 @@ def create_teach_program(tp_id: int) -> TeachPrograms:
             tpt_tpt=oracle_teach_program[(tp_id,)].ttp_ttp_id
         )
 
+        logger.debug(f"CREATE: TEACH_PROGRAM {tp_id}")
         return new_teach_program
 
+    logger.debug(f"TAKE: TEACH_PROGRAM {tp_id}")
     return TeachPrograms.get(tpr_id=tp_id)
 
 
@@ -172,8 +181,10 @@ def create_discipline(dis_id: int) -> Disciplines:
             name=oracle_discipline[(dis_id,)].name
         )
 
+        logger.debug(f"CREATE: DISCIPLINE {dis_id}")
         return new_discipline
 
+    logger.debug(f"TAKE: DISCIPLINE {dis_id}")
     return Disciplines.get(dis_id=dis_id)
 
 
@@ -187,6 +198,7 @@ def create_version() -> Versions:
         info="dis_group loading"
     )
 
+    logger.debug(f"CREATE: VERSION {new_version.ver_id}")
     return new_version
 
 
@@ -202,6 +214,7 @@ def create_group_work(sgr_id: int, type_of_work_id: int) -> GroupWorks:
         wt_wot=type_of_work_id
     )
 
+    logger.debug(f"CREATE: GROUP_WORK {new_group_work.grw_id}")
     return new_group_work
 
 
@@ -240,6 +253,8 @@ def create_group_faculty(dis_groups: dataclass, dgr_id: tuple, sgr_id: int) -> N
             ele_ele=info[2]
         )
 
+        logger.debug(f"CREATE: GROUP_FACULTY {new_group_faculty.grf_id}")
+
 
 def is_low_dgr_group(dis_groups: dict, dgr_id: int) -> bool:
     """
@@ -262,7 +277,7 @@ def find_low_lvl_group(dis_groups: dict, dgr_id: tuple) -> tuple:
     """
     if not any(value.dgr_dgr_id == dgr_id[0] for value in dis_groups.values()):
         return dgr_id
-    return find_low_lvl_group(dis_groups, (dis_groups[dgr_id].dgr_dgr_id, ))
+    return find_low_lvl_group(dis_groups, (dis_groups[dgr_id].dgr_dgr_id,))
 
 
 def choice_of_branch(study_type: str, dis_study: dataclass, dis_groups: dataclass, dgr_id: tuple):
@@ -332,18 +347,20 @@ def dpv_branch(dis_study: dataclass, dis_groups: dataclass, dgr_id: tuple) -> Tp
 
 def main():
     logger.debug("---START OF LOADING---")
+
     # Создаем VERSION
-    #version = create_version()
+    version = create_version()
 
     # реализация логики выгрузки
-    dis_groups = get_dis_groups()   # выгружаем дис группы
+    dis_groups = get_dis_groups()  # выгружаем DIS_GROUPS
     for key in dis_groups:
-        dis_studies = get_dis_studies(dis_groups[key].dss_dss_id)   # получаем dis_studies, которую они посещают
+        dis_studies = get_dis_studies(dis_groups[key].dss_dss_id)  # получаем dis_studies, которую они посещают
         dds_id = list(dis_studies.keys())[0]
 
-        if dis_studies[dds_id].foe_foe_id != 1:     # если это не очная форма обучения, пропускаем
+        if dis_studies[dds_id].foe_foe_id != 1:  # если это не очная форма обучения, пропускаем
             continue
 
+        logger.debug(f"{'-' * 5}LOADING OF GROUP {key[0]}{'-' * 5}")
         with database.atomic() as transaction:
             try:
                 # Создаем Disciplines
@@ -352,7 +369,7 @@ def main():
                 # Получаем и создаем TpDelivery исходя из типа дисциплины
                 # проверка нужна на случай, если учебная нагрузка среди студентов различна,
                 # в этом случае, мы просто не создаем группу
-                if not(tp_delivery := choice_of_branch(
+                if not (tp_delivery := choice_of_branch(
                         study_type=type_of_study(dis_studies[dds_id]),
                         dis_study=dis_studies[dds_id],
                         dis_groups=dis_groups,
@@ -368,22 +385,21 @@ def main():
 
                 # Создаем DGR_PERIOD на каждый ty_period, в котором обучается группа
                 for typ_id, tpr_chapter in zip(get_ty_period_range(key[0]), tpr_chapters):
-
                     # Вызываем TyPeriod, чтобы узнать TeachYears (ty_id)
                     ty_period = TyPeriods.get(typ_id=typ_id)
 
-                    # div_for_dgr = get_div_for_dgr(
-                    #     ty_id=ty_period.ty_ty.ty_id,
-                    #     bch_id=dis_studies[dds_id].bch_bch_id,
-                    #     dis_id=dis_studies[dds_id].dis_dis_id
-                    # )
+                    div_for_dgr = get_div_for_dgr(
+                        ty_id=ty_period.ty_ty.ty_id,
+                        bch_id=dis_studies[dds_id].bch_bch_id,
+                        dis_id=dis_studies[dds_id].dis_dis_id
+                    )
 
                     # Создаем DGR_PERIODS
                     dgr_period = DgrPeriods.create(
                         sgr_sgr=stu_group.sgr_id,
                         tch_tch=tpr_chapter.tch_id,
                         ver_ver=version.ver_id,
-                        div_div=2221,  # если кафедрру нет, то весим на ПГНИУ
+                        div_div=div_for_dgr if div_for_dgr else 2221,  # если кафедрру нет, то весим на ПГНИУ
                         typ_typ=typ_id
                     )
 
@@ -397,7 +413,7 @@ def main():
                 # Создаем GROUP_FACULTY
                 create_group_faculty(dis_groups, key, stu_group.sgr_id)
 
-                logger.debug(f"SUCCESS: для DIS_GROUP {key[0]} была успешно создана")
+                logger.debug(f"SUCCESS: для STU_GROUP {stu_group.sgr_id} была успешно создана из DIS_GROUP {key[0]}")
                 transaction.commit()
 
             except Exception as e:
@@ -406,10 +422,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
-
-
-
-
-
-
+    tc_time = get_table(table_name="TIME_OF_TPD_CHAPTERS")
+    tp_deliveries = get_table(table_name="TP_DELIVERIES")
+    tpd_chapter = get_table(table_name="TPD_CHAPTERS")
+    dis_group = get_table(table_name="DIS_GROUPS")

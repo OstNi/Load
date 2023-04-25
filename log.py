@@ -1,6 +1,6 @@
 import logging
 import logging.handlers
-
+from collections.abc import Iterable
 
 """
 Настройка logger
@@ -26,3 +26,19 @@ def _init_logger(name, filename: str | None = None):
     logger.addHandler(fh)
 
     return logger
+
+
+def func_log(func):
+    logger = _init_logger("log", "dis_load.log")
+
+    def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+        if isinstance(result, Iterable):
+            for item in result:
+                logger.debug(f"{type(item)}: {item}")
+        else:
+            logger.debug(f"{type(result)}: {result}")
+
+        return result
+
+    return wrapper
