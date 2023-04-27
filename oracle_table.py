@@ -107,7 +107,7 @@ def create_sql_table(table_name: str, select: str = None, where: str = None, add
     return out_table
 
 
-def get_table(table_name: str, select: str = None, where: str = None, add_fields: list[tuple] = None) -> dict:
+def get_table(table_name: str, select: str = None, where: str = None, add_fields: list[tuple] = None, fk: bool = False) -> dict:
     """
     по имени таблице получаем словарь, в котором pk - это ключи, а значение - dataclass с остальными
     полями таблицы
@@ -118,12 +118,15 @@ def get_table(table_name: str, select: str = None, where: str = None, add_fields
     :param add_fields:  дополнительные поля, если в select-зоне явно указаны ещё другие поля
     :param table_name: имя таблицы
     :param where: условие для фильтрации таблицы: алиас таблицы TABLE_NAME всегда 'table_aliace'
+    :param fk: Включать fk в ключ словаря
     :return: dict[pk] : dataclass(поля таблицы и их значения)
     """
-    out_table = dict()
     engine = create_engine(ENGINE_PATH, echo=True)
     attr = _get_attr(table_name, engine, add_fields)  # получаем поля таблицы и их типы (int, str)
-    pk_idx = _get_pk_idx(attr, engine, table_name)  # получаем индексы элемента-pk в строке таблицы
+    if fk:
+        pk_idx = _get_pk_idx(attr, engine, table_name, fk=True)  # получаем индексы pk и fk в строке таблицы
+    else:
+        pk_idx = _get_pk_idx(attr, engine, table_name)  # получаем индексы элемента-pk в строке таблицы
     attr = _re_attr(pk_idx, attr)  # удаляем все pk из атрибутов, они не должны быть в dataclass
     meta = _get_meta(table_name, attr)  # получаем dataclass table_name, у которого поля - это атрибуты attr
 
@@ -137,12 +140,6 @@ def get_table(table_name: str, select: str = None, where: str = None, add_fields
             case pk_lst if len(pk_lst) > 1:
                 # если pk составной, то создаем словарь с составным ключем типа tuple
                 out_table = {tuple(item[x] for x in pk_lst): meta([item[i] for i in range(len(item)) if i not in pk_lst]) for item in table}
-
-            case pk_lst if len(pk_lst) == 0:
-                # если у таблицы нет явного pk, просто индексируем записи
-                idx = 0
-                for item in table:
-                    out_table[idx] = meta(*item)
 
             case _:
                 logger.debug(f"Невалидная таблица {table_name}")
@@ -175,6 +172,24 @@ def _get_pk(table_name, engine: Engine) -> list:
     pk = [i.lower() for i in pk]
 
     return pk
+
+
+def _get_fk(table_name: str, engine: Engine):
+    sql = "SELECT ucc.COLUMN_NAME " \
+          "FROM USER_CONS_COLUMNS ucc, " \
+          "USER_CONSTRAINTS uc " \
+          "WHERE uc.CONSTRAINT_NAME = ucc.CONSTRAINT_NAME " \
+          f"AND uc.TABLE_NAME = '{table_name}' " \
+          "AND uc.CONSTRAINT_TYPE = 'R'"
+
+    fk = list()
+    with engine.connect() as conn:
+        table = conn.execute(text(sql))
+        for item in table:
+            fk += list(item)
+    fk = [i.lower() for i in fk]
+
+    return fk
 
 
 def _get_attr(table_name, engine: Engine, add_fields: list[tuple] = None) -> list:
@@ -222,7 +237,7 @@ def _get_meta(name, attr):
     return make_dataclass(str(name), attr)
 
 
-def _get_pk_idx(attr: list[tuple], engine: Engine, table_name) -> list:
+def _get_pk_idx(attr: list[tuple], engine: Engine, table_name, fk: bool = False) -> list:
     """
     Получаем индексы pk в списке атрибутов. Это нужно для их удаления, при создании метакласса,
     т.к. pk таблицы - это ключи словаря
@@ -230,12 +245,19 @@ def _get_pk_idx(attr: list[tuple], engine: Engine, table_name) -> list:
     :param attr: список полей таблицы
     :param engine:  connect
     :param table_name:  имя таблицы
+    :param fk: включаем ли fk в ключ словаря
     :return: pk_idx: список с индексами элементов-pk таблицы
     """
     pk = _get_pk(table_name, engine)  # ищем pk
+
+    if fk:
+        fk = _get_fk(table_name, engine)
+
     pk_idx = list()
     for idx, key in enumerate(attr):
         if key[0] in pk:
+            pk_idx.append(idx)
+        if fk and key[0] in fk:
             pk_idx.append(idx)
 
     return pk_idx
@@ -254,4 +276,9 @@ def _re_attr(pk_idx: list, attr: list) -> list:
         attr.pop(idx)
 
     return attr
+
+
+if __name__ == "__main__":
+    engine = create_engine(ENGINE_PATH, echo=True)
+    print(get_table(table_name="TIME_OF_TPD_CHAPTERS", fk=True))
 

@@ -3,6 +3,7 @@ from oracle_table import get_table, create_sql_table
 from additions import range_ty_period
 from math import ceil
 from oracle_table import call_oracle_function
+from dataclasses import dataclass
 from log import _init_logger
 import cx_Oracle
 
@@ -12,6 +13,51 @@ import cx_Oracle
 
 # инициализируем лог
 logger = _init_logger(name="dis_group", filename="dis_group.log")
+
+
+def get_personal_records() -> get_table:
+    """
+    Personal records + tp_id каждого студента
+    """
+    select = " tfs.TPL_TP_ID, tfs.tp table_aliace.* "
+    where = " ,TP_FOR_STUDENTS tfs " \
+            " WHERE table_aliace.pr_id = tfs.PR_PR_ID " \
+            " AND tfs.TFS_ID = (SELECT DEK.CURRENT_TFS(pr_id) " \
+            "FROM PERSONAL_RECORDS pr " \
+            "WHERE pr.PR_ID = tfs.PR_PR_ID) " \
+            "ORDER BY table_aliace.PR_ID "
+    add_field = [('tp_id', int)]
+
+    return get_table(table_name="PERSONAL_RECORDS", where=where, select=select, add_fields=add_field)
+
+
+def get_tp_components() -> get_table:
+    """
+    TP_COMPONENNTS + dis_id и tpl_id (id учебного плана)
+    """
+
+    select = " t.TP_TP_ID, tp.DIS_DIS_ID, table_aliace.*"
+    where = ",TERMS t " \
+            ",TEACH_PROGRAMS tp " \
+            "WHERE table_aliace.TER_TER_ID = t.TER_ID " \
+            "AND table_aliace.TP_TP_ID = tp.TP_ID "
+    add_field = [("tpl_id", int), ("dis_id", int)]
+
+    return get_table(table_name="TP_COMPONENTS", where=where, select=select, add_fields=add_field)
+
+
+def get_tp_tpd_crossings():
+    """
+    TP_TPD_CROSSINGS + tpl_id и tpdl_id
+    """
+    select = "tc.TPDL_TPDL_ID, t.TP_TP_ID, table_aliace.*"
+    where = "	,TPD_CHAPTERS tc" \
+            " ,terms t " \
+            "WHERE table_aliace.TC_TC_ID = tc.TC_ID " \
+            "AND table_aliace.TER_TER_ID = t.TER_ID"
+    add_field = [("tpl_id", int), ("tpdl_id", int)]
+
+    return get_table(table_name="TP_TPD_CROSSINGS", where=where, select=select, add_fields=add_field)
 
 
 def get_group_faculty_info(pr_id: int) -> dict:
@@ -168,26 +214,15 @@ def _get_teach_plan_id(pr_id: int) -> int:
     return create_sql_table(table_name='TP_FOR_STUDENTS', where=where)[0].tpl_tp_id
 
 
-def get_ty_period_range(dgr_id: int) -> list[int]:
+def get_ty_period_range(dis_group: dataclass, dgr_periods: dict) -> list[int]:
     """
-    :param dgr_id: id dis_group
+    :param dis_group: dis_group
+    :param dgr_periods: DGR_PERIOD (по нему узнаем периоды начала и конца)
     :return: список ty_periods от начала дисциплины до конца
     """
-    select = 'dp_s.TYP_TYP_ID, dp_k.TYP_TYP_ID, table_aliace.*'
-    where = ' ,DGR_PERIODS dp_s ' \
-            ',DGR_PERIODS dp_k ' \
-            'WHERE dp_s.DGP_ID = table_aliace.DGP_START_ID  ' \
-            'AND dp_k.dgp_id = table_aliace.DGP_STOP_ID  ' \
-            f'AND table_aliace.DGR_ID = {dgr_id}'
-
-    add_attr = [
-        ('start_ty_period', int),
-        ('stop_ty_period', int)
-    ]
-
-    ty_period = create_sql_table(table_name='DIS_GROUPS', where=where, select=select, add_fields=add_attr)
-    start, stop = ty_period[0].start_ty_period, ty_period[0].stop_ty_period
-    return range_ty_period(start, stop)
+    return range_ty_period(
+        start=dgr_periods[dis_group.dgp_start_id].typ_typ_id,
+        stop=dgr_periods[dis_group.dgp_stop_id].typ_typ_id)
 
 
 def get_tpdl_use_pr_dis(pr_id: int, dis_id: int) -> int | None:
@@ -214,28 +249,19 @@ def get_tpdl_use_pr_dis(pr_id: int, dis_id: int) -> int | None:
     return request_table[0].tpdl_tpdl_id if request_table[0].tpdl_tpdl_id else None
 
 
-def get_terms(pr_id: int, tpdl_id: int) -> list[int]:
+def get_terms(tp_tpd_crossings: dict, tp_id: int, tpdl_id: int) -> set:
     """
-    Триместры, в которых преподаётся дисциплина
-    :param pr_id: id личного дела студента
-    :param tpdl_id: схема доставки
-    :return: список TER_ID
+    :param tp_tpd_crossings: TP_TPD_CROSSINGS - сущность пересечения tpd_chhapter и terms
+    (нужна, чтобы вытащить триместры по tpdl)
+    :param tp_id: id учебного плана
+    :param tpdl_id: id схемы доставки
+    :return: ter_id, в которых преподается дисциплина со схемой доставки tpdl_id по учебному плану tp_id
     """
-    tp_id = _get_teach_plan_id(pr_id)
-    select = "t.TER_ID, table_aliace.*"
-    where = "	,TPD_CHAPTERS tc " \
-            ",TERMS t " \
-            "WHERE table_aliace.TER_TER_ID = t.TER_ID " \
-            f"AND tc.TPDL_TPDL_ID = {tpdl_id} " \
-            "AND table_aliace.TC_TC_ID  = tc.TC_ID " \
-            f"AND t.TP_TP_ID = {tp_id}"
-
-    add_attr = [
-        ("ter_id", int)
-    ]
-
-    table = create_sql_table(table_name="TP_TPD_CROSSINGS", select=select, where=where, add_fields=add_attr)
-    return [table[i].ter_id for i in table]
+    return {
+        value.ter_ter_id
+        for value in tp_tpd_crossings.values()
+        if value.tpl_id == tp_id and value.tpdl_id == tpdl_id
+    }
 
 
 def get_dis_studies(dss_id: int) -> dict:
@@ -304,7 +330,7 @@ def checker(dgr_id: int, lst: list[list[int]]) -> bool:
     :param lst: список с парами (id личной записи студента, id схемы доставки)
     :return: True - нагрузка одинаковая / False - нагрузка разная
     """
-    ty_periods: list[int] = get_ty_period_range(dgr_id)  # узнаем учебные периоды группы
+    ty_periods: list[int] = get_ty_period_range(dgr_id)  # учебные периоды группы
     terms: dict = {}  # key = tpdl_id, value = [terms]
     ch_value: dict = {}  # key = ty_period value = [нагрузки по схемам доставки на этот учебный период]
 

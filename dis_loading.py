@@ -280,75 +280,62 @@ def find_low_lvl_group(dis_groups: dict, dgr_id: int) -> int:
     return find_low_lvl_group(dis_groups, dis_groups[dgr_id].dgr_dgr_id)
 
 
-def get_type_of_discipline(discipline: dataclass) -> str:
-    """
-    Тип дисциплины
-    :param discipline: поля таблицы
-    :return: вид дисциплины эл - электив | фк - факультатив | дпв - дисциплина по выбору
-    """
-    if discipline.tpdl_tpdl_id:
-        return 'эл'
-    if discipline.fcr_fcr_id:
-        return "фк"
-
-    return "дпв"
-
-
-def choice_of_branch(study_type: str, dgr_id: int, **kwargs):
+def choice_of_branch(**kwargs):
     """
     Выбор ветки выгрузки - электив, факультатив, дисциплина по выборру
-    :param study_type: тип дисциплины
-    :param dis_study: дисциплина, которую посещает группа
-    :param dis_groups: все DIS_GROUP
-    :param dgr_id: id текущей группы
     """
-    branches = {
-        "эл": lambda: elective_branch(**kwargs),
-        "фк": lambda: facultative_branch(**kwargs),
-        "дпв": lambda: dpv_branch(dgr_id, **kwargs)
-    }
-
-    return branches.get(study_type)()
+    if kwargs["dis_study"].tpdl_tpdl_id:
+        return elective_branch(kwargs["dis_study"].tpdl_tpdl_id)
+    if kwargs["dis_study"].fcr_fcr_id:
+        return facultative_branch(kwargs["dis_study"].fcr_fcr_id, kwargs["fcr"])
+    return dpv_branch(**kwargs)
 
 
-def elective_branch(**kwargs) -> TpDeliveries:
+def elective_branch(tpdl_id: int) -> TpDeliveries:
     """
     Ветка электива. Узнаем tpdl_id и создаем TpDeliveries с указанным tpdl_id
     :return: объект класса TpDeliveries postgres_model.py
     """
-    return create_tp_delivery(kwargs["dis_study"].tpdl_tpdl_id)
+    return create_tp_delivery(tpdl_id)
 
 
-def facultative_branch(**kwargs) -> TpDeliveries:
+def facultative_branch(fcr_id: int, fcr: dict) -> TpDeliveries:
     """
     Ветка факультатива. Узнаем tpdl_id и создаем TpDeliveries с указанным tpdl_id
     :return: объект класса TpDeliveries postgres_model.py
     """
-    fcr_id = kwargs["discipline"].fcr_fcr_id
-    return create_tp_delivery(kwargs["fcr"][fcr_id].tpdl_tpdl_id)
+    return create_tp_delivery(fcr[fcr_id].tpdl_tpdl_id)
 
 
-def dpv_branch(dgr_id: int, **kwargs) -> TpDeliveries | None:
-    # dis_study: dataclass, dis_groups: dataclass, dgr_id: tuple
+def dpv_branch(**kwargs) -> TpDeliveries | None:
     """
     Ветка дисциплины по выбору. Находим нижний уровень, берем личные дела студента и из их
     учебного плана находим схему доставки
     :return: объект класса TpDeliveries postgres_model.py
     """
+
     # Находим нижний уровень этого дерева (только на нижнем уровне есть связь со студентами)
-    low_dgr_id = find_low_lvl_group(kwargs["dis_group"], dgr_id)
+    low_dgr_id = find_low_lvl_group(kwargs["dis_groups"], kwargs["dgr_id"])
 
-    dgs_id = kwargs["dgr_student"][kwargs["dis_group"][low_dgr_id]]
+    # Создаем множество из учебных планов всех студентов нижнего уровня группы
+    tp_set = {kwargs["personal_records"][value.pr_pr_id].tp_id for value in kwargs["dgr_students"]
+              if value.dgr_dgr_id == low_dgr_id}
 
-    # Берем личные дела студентов с нижнего уровня
-    pr_lst =
+    # Создаем множество со схемами доставки группы
+    tpdl_set = {value.tpdl_tpdl_id for tp_id in tp_set for key, value in kwargs["tp_components"].items() if
+                value.tpl_id == tp_id and value.dis_id == kwargs["dis_id"]}
 
-    pr_tpdl_lst = [[i] for i in pr_lst]
-    for i in range(len(pr_tpdl_lst)):
-        pr_tpdl_lst[i].append(get_tpdl_use_pr_dis(pr_lst[i], dis_study.dis_dis_id))
+    idx = 0
+    tpdl_tp_dict = {}
+    for tp_id, tpdl_id in zip(tp_set, tpdl_set):
+        tpdl_tp_dict[idx] = {
+            "tp_id": tp_id,
+            "tpdl_id": tpdl_id
+        }
+        idx += 1
 
     # Сравниваем учебные нагрузки среди студентов группы
-    if not checker(dgr_id[0], pr_tpdl_lst):
+    if not checker(**kwargs):
         logger.debug(f"Error. Группа dgr_id: {dgr_id} не может быть создана")
         return None
 
@@ -361,17 +348,21 @@ def main():
     logger.debug("---START OF LOADING---")
 
     # Создаем VERSION
-    version = create_version()
+    #version = create_version()
 
     # выгружаем все сущности
     dis_groups = get_dis_groups()
     dis_studies = get_table(table_name="DIS_STUDIES")
     disciplines = get_table(table_name="DISCIPLINES")
-    tpd_chapters = get_table(table_name="TPD_CHAPTERS")
-    time_of_tpd_chapters = get_table(table_name="TIME_OF_TPD_CHAPTERS")
-    personal_records = get_table(table_name="PERSONAL_RECORDS")
     dgr_students = get_table(table_name="DGR_STUDENTS")
+    tpd_chapters = get_table(table_name="TPD_CHAPTERS")
+    teach_programs = get_table(table_name="TEACH_PROGRAMS")
     tp_deliveries = get_table(table_name="TP_DELIVERIES")
+    tp_tpd_crossings = get_tp_tpd_crossings()
+    terms = get_table(table_name="TERMS")
+    tp_components = get_tp_components()
+    time_of_tpd_chapters = get_table(table_name="TIME_OF_TPD_CHAPTERS")
+    personal_records = get_personal_records()
     facultative_requests = get_table(table_name='FACULTATIVE_REQUESTS')
 
     for dgr_id, value in dis_groups.items():
@@ -386,7 +377,19 @@ def main():
                 # Создаем Disciplines
                 create_discipline(dis_id=dis_study.dis_dis_id, discipline=disciplines[dis_study.dis_dis_id])
 
-
+                choice_of_branch(
+                    dis_study=dis_study,
+                    fcr=facultative_requests,
+                    dgr_id=dgr_id,
+                    dis_groups=dis_groups,
+                    tp_components=tp_components,
+                    personal_records=personal_records,
+                    dgr_students=dgr_students,
+                    dis_id=dis_study.dis_dis_id,
+                    teach_program=teach_programs,
+                    terms=terms,
+                    tp_tpd_crossings=tp_tpd_crossings
+                )
 
                 # Создаем STU_GROUP если группа уже создана, то пропускаем
                 if not (stu_group := create_stu_group(dis_groups[key], key[0])):
