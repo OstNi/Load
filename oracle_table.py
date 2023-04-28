@@ -4,8 +4,11 @@ from sqlalchemy import create_engine, text, inspect, Engine
 from dataclasses import make_dataclass
 import cx_Oracle
 import re
-
+from tqdm import tqdm
 from log import _init_logger
+import logging
+
+logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
 
 logger = _init_logger(name="oracle_table", filename="oracle_table.log")
 
@@ -107,7 +110,7 @@ def create_sql_table(table_name: str, select: str = None, where: str = None, add
     return out_table
 
 
-def get_table(table_name: str, select: str = None, where: str = None, add_fields: list[tuple] = None, fk: bool = False) -> dict:
+def get_table(table_name: str, select: str = None, where: str = None, add_fields: list[tuple] = None) -> dict:
     """
     по имени таблице получаем словарь, в котором pk - это ключи, а значение - dataclass с остальными
     полями таблицы
@@ -118,32 +121,25 @@ def get_table(table_name: str, select: str = None, where: str = None, add_fields
     :param add_fields:  дополнительные поля, если в select-зоне явно указаны ещё другие поля
     :param table_name: имя таблицы
     :param where: условие для фильтрации таблицы: алиас таблицы TABLE_NAME всегда 'table_aliace'
-    :param fk: Включать fk в ключ словаря
     :return: dict[pk] : dataclass(поля таблицы и их значения)
     """
     engine = create_engine(ENGINE_PATH, echo=True)
     attr = _get_attr(table_name, engine, add_fields)  # получаем поля таблицы и их типы (int, str)
-    if fk:
-        pk_idx = _get_pk_idx(attr, engine, table_name, fk=True)  # получаем индексы pk и fk в строке таблицы
-    else:
-        pk_idx = _get_pk_idx(attr, engine, table_name)  # получаем индексы элемента-pk в строке таблицы
+    pk_idx = _get_pk_idx(attr, engine, table_name)  # получаем индексы элемента-pk в строке таблицы
     attr = _re_attr(pk_idx, attr)  # удаляем все pk из атрибутов, они не должны быть в dataclass
     meta = _get_meta(table_name, attr)  # получаем dataclass table_name, у которого поля - это атрибуты attr
 
     with engine.connect() as conn:
         table = conn.execute(text(f'SELECT {select if select else "table_aliace.*"} FROM {table_name} table_aliace {where if where else ""}'))
-        match pk_idx:
-            case pk_lst if len(pk_lst) == 1:
-                # если pk не составной, то просто создаем словарь
-                out_table = {item[pk_lst[0]]: meta([item[i] for i in range(len(item)) if i != pk_lst[0]]) for item in table}
+        out_table = dict()
+        fetched_table = table.fetchall()
+        bar = tqdm(desc=f"[*] Загрузка таблицы: {table_name}", total=len(fetched_table))
+        for item in fetched_table:
+            #
+            out_table[item[pk_idx[0]]] = meta(*[item[i] for i in range(len(item)) if i != pk_idx[0]])
+            bar.update(1)
 
-            case pk_lst if len(pk_lst) > 1:
-                # если pk составной, то создаем словарь с составным ключем типа tuple
-                out_table = {tuple(item[x] for x in pk_lst): meta([item[i] for i in range(len(item)) if i not in pk_lst]) for item in table}
-
-            case _:
-                logger.debug(f"Невалидная таблица {table_name}")
-                out_table = {}
+        bar.close()
 
     return out_table
 
@@ -174,22 +170,22 @@ def _get_pk(table_name, engine: Engine) -> list:
     return pk
 
 
-def _get_fk(table_name: str, engine: Engine):
-    sql = "SELECT ucc.COLUMN_NAME " \
-          "FROM USER_CONS_COLUMNS ucc, " \
-          "USER_CONSTRAINTS uc " \
-          "WHERE uc.CONSTRAINT_NAME = ucc.CONSTRAINT_NAME " \
-          f"AND uc.TABLE_NAME = '{table_name}' " \
-          "AND uc.CONSTRAINT_TYPE = 'R'"
-
-    fk = list()
-    with engine.connect() as conn:
-        table = conn.execute(text(sql))
-        for item in table:
-            fk += list(item)
-    fk = [i.lower() for i in fk]
-
-    return fk
+# def _get_fk(table_name: str, engine: Engine):
+#     sql = "SELECT ucc.COLUMN_NAME " \
+#           "FROM USER_CONS_COLUMNS ucc, " \
+#           "USER_CONSTRAINTS uc " \
+#           "WHERE uc.CONSTRAINT_NAME = ucc.CONSTRAINT_NAME " \
+#           f"AND uc.TABLE_NAME = '{table_name}' " \
+#           "AND uc.CONSTRAINT_TYPE = 'R'"
+#
+#     fk = list()
+#     with engine.connect() as conn:
+#         table = conn.execute(text(sql))
+#         for item in table:
+#             fk += list(item)
+#     fk = [i.lower() for i in fk]
+#
+#     return fk
 
 
 def _get_attr(table_name, engine: Engine, add_fields: list[tuple] = None) -> list:
@@ -237,7 +233,7 @@ def _get_meta(name, attr):
     return make_dataclass(str(name), attr)
 
 
-def _get_pk_idx(attr: list[tuple], engine: Engine, table_name, fk: bool = False) -> list:
+def _get_pk_idx(attr: list[tuple], engine: Engine, table_name) -> list:
     """
     Получаем индексы pk в списке атрибутов. Это нужно для их удаления, при создании метакласса,
     т.к. pk таблицы - это ключи словаря
@@ -245,19 +241,13 @@ def _get_pk_idx(attr: list[tuple], engine: Engine, table_name, fk: bool = False)
     :param attr: список полей таблицы
     :param engine:  connect
     :param table_name:  имя таблицы
-    :param fk: включаем ли fk в ключ словаря
     :return: pk_idx: список с индексами элементов-pk таблицы
     """
     pk = _get_pk(table_name, engine)  # ищем pk
 
-    if fk:
-        fk = _get_fk(table_name, engine)
-
     pk_idx = list()
     for idx, key in enumerate(attr):
         if key[0] in pk:
-            pk_idx.append(idx)
-        if fk and key[0] in fk:
             pk_idx.append(idx)
 
     return pk_idx
@@ -272,13 +262,8 @@ def _re_attr(pk_idx: list, attr: list) -> list:
     :param attr: атрибуты таблицы
     :return: список атрибуттов без pk
     """
-    for idx in pk_idx:
+    for disp, idx in enumerate(pk_idx):
         attr.pop(idx)
 
     return attr
-
-
-if __name__ == "__main__":
-    engine = create_engine(ENGINE_PATH, echo=True)
-    print(get_table(table_name="TIME_OF_TPD_CHAPTERS", fk=True))
 

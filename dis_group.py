@@ -19,7 +19,7 @@ def get_personal_records() -> get_table:
     """
     Personal records + tp_id каждого студента
     """
-    select = " tfs.TPL_TP_ID, tfs.tp table_aliace.* "
+    select = " tfs.TPL_TP_ID, table_aliace.* "
     where = " ,TP_FOR_STUDENTS tfs " \
             " WHERE table_aliace.pr_id = tfs.PR_PR_ID " \
             " AND tfs.TFS_ID = (SELECT DEK.CURRENT_TFS(pr_id) " \
@@ -55,9 +55,21 @@ def get_tp_tpd_crossings():
             " ,terms t " \
             "WHERE table_aliace.TC_TC_ID = tc.TC_ID " \
             "AND table_aliace.TER_TER_ID = t.TER_ID"
-    add_field = [("tpl_id", int), ("tpdl_id", int)]
+    add_field = [("tpdl_id", int), ("tpl_id", int)]
 
     return get_table(table_name="TP_TPD_CROSSINGS", where=where, select=select, add_fields=add_field)
+
+
+def get_time_of_tpd_chapters():
+    """
+    TIME_OF_TPD_CHAPTERS + term_id
+    """
+    select = " ttc.ter_ter_id, table_aliace.* "
+    where = " ,TP_TPD_CROSSINGS ttc " \
+            " WHERE table_aliace.TC_TC_ID = ttc.TC_TC_ID "
+
+    add_field = [("ter_id", int)]
+    return get_table(table_name="TIME_OF_TPD_CHAPTERS", select=select, where=where, add_fields=add_field)
 
 
 def get_group_faculty_info(pr_id: int) -> dict:
@@ -82,16 +94,6 @@ def get_group_faculty_info(pr_id: int) -> dict:
     info = create_sql_table(table_name="personal_records", select=select, where=where, add_fields=add_field)
 
     return {"div_id": info[0].div_id, "foe_id": info[0].foe_id, "edu_lvl": info[0].edu_lvl}
-
-
-def get_tpdl(tpdl_id: int) -> dict:
-    """
-    Схема доставки с id = tpdl_id
-    :param tpdl_id: id схемы достваки
-    :return: TP_DELIVERIES: dict[tpdl_id] = dataclass(поле таблицы: значение)
-    """
-    where = f" WHERE table_aliace.tpdl_id = {tpdl_id}"
-    return get_table(table_name="TP_DELIVERIES", where=where)
 
 
 def get_num_of_course(dgr_id: int) -> int:
@@ -222,7 +224,8 @@ def get_ty_period_range(dis_group: dataclass, dgr_periods: dict) -> list[int]:
     """
     return range_ty_period(
         start=dgr_periods[dis_group.dgp_start_id].typ_typ_id,
-        stop=dgr_periods[dis_group.dgp_stop_id].typ_typ_id)
+        stop=dgr_periods[dis_group.dgp_stop_id].typ_typ_id
+    )
 
 
 def get_tpdl_use_pr_dis(pr_id: int, dis_id: int) -> int | None:
@@ -249,7 +252,7 @@ def get_tpdl_use_pr_dis(pr_id: int, dis_id: int) -> int | None:
     return request_table[0].tpdl_tpdl_id if request_table[0].tpdl_tpdl_id else None
 
 
-def get_terms(tp_tpd_crossings: dict, tp_id: int, tpdl_id: int) -> set:
+def get_terms(tp_tpd_crossings: dict, tp_id: int, tpdl_id: int) -> list:
     """
     :param tp_tpd_crossings: TP_TPD_CROSSINGS - сущность пересечения tpd_chhapter и terms
     (нужна, чтобы вытащить триместры по tpdl)
@@ -257,11 +260,8 @@ def get_terms(tp_tpd_crossings: dict, tp_id: int, tpdl_id: int) -> set:
     :param tpdl_id: id схемы доставки
     :return: ter_id, в которых преподается дисциплина со схемой доставки tpdl_id по учебному плану tp_id
     """
-    return {
-        value.ter_ter_id
-        for value in tp_tpd_crossings.values()
-        if value.tpl_id == tp_id and value.tpdl_id == tpdl_id
-    }
+
+    return sorted(value.ter_ter_id for value in tp_tpd_crossings.values() if value.tpl_id == tp_id and value.tpdl_id == tpdl_id)
 
 
 def get_dis_studies(dss_id: int) -> dict:
@@ -293,20 +293,6 @@ def get_tpdl_for_fac(fcr_id: int) -> int:
     return fac_req[(fcr_id,)].tpdl_tpdl_id
 
 
-def type_of_study(study: type) -> str:
-    """
-    Тип дисциплины (электив, факультатив, дисциплина по выбору)
-    :param study: - dataclass по ключу dss_id словаря  dis_studies
-    :return: тип дисциплины
-    """
-    if study.tpdl_tpdl_id:
-        return 'эл'  # электив
-    if study.fcr_fcr_id:
-        return 'фак'  # факультатив
-
-    return 'дпв'  # дисциплина по выбору
-
-
 def type_of_work(dgr_id: int) -> list[int]:
     """
     Получаем тип работы для группы
@@ -323,48 +309,50 @@ def type_of_work(dgr_id: int) -> list[int]:
     return [key[0] for key in oracle_type_of_work.keys()]
 
 
-def checker(dgr_id: int, lst: list[list[int]]) -> bool:
+def checker(
+        tp_tpdl: dict,
+        dis_group: dataclass,
+        dgr_periods: dict,
+        tp_tpd_crossings: dict,
+        tc_time: dict
+) -> bool:
     """
     Проверяем наличие различия нагрузки по часам у лекции, практик и лаб у студентов одной группы
-    :param dgr_id: id группы (DIS_GROUPS)
-    :param lst: список с парами (id личной записи студента, id схемы доставки)
     :return: True - нагрузка одинаковая / False - нагрузка разная
     """
-    ty_periods: list[int] = get_ty_period_range(dgr_id)  # учебные периоды группы
-    terms: dict = {}  # key = tpdl_id, value = [terms]
+    ty_periods: list[int] = get_ty_period_range(dis_group=dis_group, dgr_periods=dgr_periods)  # учебные периоды группы
+    terms_dict: dict = {}  # key = tpdl_id, value = [terms]
     ch_value: dict = {}  # key = ty_period value = [нагрузки по схемам доставки на этот учебный период]
 
     # заполнение словаря terms
-    for i in range(len(lst)):
-        terms[lst[i][1]] = get_terms(lst[i][0], lst[i][1])
+    for idx, value in tp_tpdl.items():
+        # Заполняем словарь terms
+        terms_dict[value["tpdl_id"]] = get_terms(
+            tp_tpd_crossings=tp_tpd_crossings,
+            tp_id=value["tp_id"],
+            tpdl_id=value["tpdl_id"]
+        )
 
-    for key in terms:
+    for tpdl_id, terms in terms_dict.items():
         # сравниваем количество учебных периодов у студента в схеме доставки  и количеством учебных периодов группы
-        if len(terms[key]) != len(ty_periods):
+        if len(terms) != len(ty_periods):
             return False
 
-        for item in range(len(terms[key])):
-            # запрос для получения нагрузки
-            value_where = ",TPD_CHAPTERS tc, " \
-                          "TP_TPD_CROSSINGS ttc " \
-                          "WHERE ttc.TC_TC_ID = tc.TC_ID " \
-                          f"AND ttc.TER_TER_ID = {terms[key][item]} " \
-                          f"AND tc.TPDL_TPDL_ID = {key} " \
-                          "AND table_aliace.TC_TC_ID = tc.TC_ID " \
-                          "ORDER BY ttc.TER_TER_ID"
-            val_table = create_sql_table(table_name="TIME_OF_TPD_CHAPTERS", where=value_where)
+        for idx, ter_id in enumerate(terms):
+
+            # список со значением нагрузки
             val_array = [0] * 7
 
-            # получаем массив с количеством часов лекции на 1 индексе,
-            # количеством часов лаб на 2 индексе и практик на 6 индексе
-            for i in val_table:
-                val_array[val_table[i].tow_tow_id if val_table[i].tow_tow_id in [1, 2, 6] else 0] = val_table[i].value
+            # находим нагрузки по виду работ по заданным tpdl_id и ter_id
+            for value in tc_time.values():
+                if value.ter_id == ter_id and value.tpdl_tpdl_id == tpdl_id and value.tow_tow_id in [1, 2, 6]:
+                    val_array[value.tow_tow_id] = value.value
 
             # раскидываем нагрузку по ty_period
-            if ty_periods[item] in ch_value:
-                ch_value[ty_periods[item]].append([val_array[1], val_array[2], val_array[6]])
+            if ty_periods[idx] in ch_value:
+                ch_value[ty_periods[idx]].append([val_array[1], val_array[2], val_array[6]])
             else:
-                ch_value[ty_periods[item]] = [[val_array[1], val_array[2], val_array[6]]]
+                ch_value[ty_periods[idx]] = [[val_array[1], val_array[2], val_array[6]]]
 
     # идем по всем ty_period
     # сравниваем значения нагрузок по значению
