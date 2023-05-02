@@ -5,12 +5,13 @@ from dataclasses import make_dataclass
 import cx_Oracle
 import re
 from tqdm import tqdm
-from log import _init_logger
 import logging
 
-logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
-
-logger = _init_logger(name="oracle_table", filename="oracle_table.log")
+# Выключения sqlalchemy logging
+# Сообщения выводятся толькоо в случае ошибки
+logging.basicConfig()
+logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
+logging.getLogger('sqlalchemy.engine.Engine').setLevel(logging.ERROR)
 
 """
 Подключение к Oracle и функции для выгрузки таблиц
@@ -97,7 +98,7 @@ def create_sql_table(table_name: str, select: str = None, where: str = None, add
     """
 
     out_table = dict()   # словарь, который будет содержать таблицу
-    engine = create_engine(ENGINE_PATH, echo=True)
+    engine = create_engine(ENGINE_PATH, echo=False)
     attr = _get_attr(table_name, engine, add_fields)  # получаем поля таблицы и их типы (int, str)
     meta = _get_meta(table_name, attr)  # получаем dataclass table_name, у которого поля - это атрибуты attr
     with engine.connect() as conn:
@@ -123,7 +124,7 @@ def get_table(table_name: str, select: str = None, where: str = None, add_fields
     :param where: условие для фильтрации таблицы: алиас таблицы TABLE_NAME всегда 'table_aliace'
     :return: dict[pk] : dataclass(поля таблицы и их значения)
     """
-    engine = create_engine(ENGINE_PATH, echo=True)
+    engine = create_engine(ENGINE_PATH, echo=False)
     attr = _get_attr(table_name, engine, add_fields)  # получаем поля таблицы и их типы (int, str)
     pk_idx = _get_pk_idx(attr, engine, table_name)  # получаем индексы элемента-pk в строке таблицы
     attr = _re_attr(pk_idx, attr)  # удаляем все pk из атрибутов, они не должны быть в dataclass
@@ -133,13 +134,13 @@ def get_table(table_name: str, select: str = None, where: str = None, add_fields
         table = conn.execute(text(f'SELECT {select if select else "table_aliace.*"} FROM {table_name} table_aliace {where if where else ""}'))
         out_table = dict()
         fetched_table = table.fetchall()
-        bar = tqdm(desc=f"[*] Загрузка таблицы: {table_name}", total=len(fetched_table))
+       # bar = tqdm(desc=f"[*] Загрузка таблицы: {table_name}", total=len(fetched_table))
         for item in fetched_table:
             #
             out_table[item[pk_idx[0]]] = meta(*[item[i] for i in range(len(item)) if i != pk_idx[0]])
-            bar.update(1)
+            #bar.update(1)
 
-        bar.close()
+        #bar.close()
 
     return out_table
 

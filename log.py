@@ -1,6 +1,5 @@
 import logging
 import logging.handlers
-from collections.abc import Iterable
 
 """
 Настройка logger
@@ -10,6 +9,7 @@ from collections.abc import Iterable
 def _init_logger(name, filename: str | None = None):
     directory_path = "logs/"
     logger = logging.getLogger(name)
+    logger.propagate = False
     format = '%(asctime)s :: %(name)s:%(lineno)s :: %(levelname)s :: %(message)s'
     logger.setLevel(logging.DEBUG)
     sh = logging.StreamHandler()

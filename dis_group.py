@@ -1,11 +1,16 @@
 # Подготовка данных для выгрузки со стороны DIS_GROUP
 from oracle_table import get_table, create_sql_table
-from additions import range_ty_period
-from math import ceil
-from oracle_table import call_oracle_function
-from dataclasses import dataclass
 from log import _init_logger
+from additions import range_ty_period
+from oracle_table import call_oracle_function
+
+from dataclasses import dataclass
+from math import ceil
+from itertools import groupby
+from itertools import groupby
+from operator import attrgetter
 import cx_Oracle
+
 
 """
 Функции для выгрузки данных со стороны DIS_GROUP
@@ -58,18 +63,6 @@ def get_tp_tpd_crossings():
     add_field = [("tpdl_id", int), ("tpl_id", int)]
 
     return get_table(table_name="TP_TPD_CROSSINGS", where=where, select=select, add_fields=add_field)
-
-
-def get_time_of_tpd_chapters():
-    """
-    TIME_OF_TPD_CHAPTERS + term_id
-    """
-    select = " ttc.ter_ter_id, table_aliace.* "
-    where = " ,TP_TPD_CROSSINGS ttc " \
-            " WHERE table_aliace.TC_TC_ID = ttc.TC_TC_ID "
-
-    add_field = [("ter_id", int)]
-    return get_table(table_name="TIME_OF_TPD_CHAPTERS", select=select, where=where, add_fields=add_field)
 
 
 def get_group_faculty_info(pr_id: int) -> dict:
@@ -252,7 +245,7 @@ def get_tpdl_use_pr_dis(pr_id: int, dis_id: int) -> int | None:
     return request_table[0].tpdl_tpdl_id if request_table[0].tpdl_tpdl_id else None
 
 
-def get_terms(tp_tpd_crossings: dict, tp_id: int, tpdl_id: int) -> list:
+def get_tc_id_for_check(tp_tpd_crossings: dict, tp_id: int, tpdl_id: int) -> list:
     """
     :param tp_tpd_crossings: TP_TPD_CROSSINGS - сущность пересечения tpd_chhapter и terms
     (нужна, чтобы вытащить триместры по tpdl)
@@ -261,7 +254,7 @@ def get_terms(tp_tpd_crossings: dict, tp_id: int, tpdl_id: int) -> list:
     :return: ter_id, в которых преподается дисциплина со схемой доставки tpdl_id по учебному плану tp_id
     """
 
-    return sorted(value.ter_ter_id for value in tp_tpd_crossings.values() if value.tpl_id == tp_id and value.tpdl_id == tpdl_id)
+    return sorted(value.tc_tc_id for value in tp_tpd_crossings.values() if value.tpl_id == tp_id and value.tpdl_id == tpdl_id)
 
 
 def get_dis_studies(dss_id: int) -> dict:
@@ -321,38 +314,46 @@ def checker(
     :return: True - нагрузка одинаковая / False - нагрузка разная
     """
     ty_periods: list[int] = get_ty_period_range(dis_group=dis_group, dgr_periods=dgr_periods)  # учебные периоды группы
-    terms_dict: dict = {}  # key = tpdl_id, value = [terms]
+    tpd_chapters_dict: dict = {}  # key = tpdl_id, value = [tc_id]
     ch_value: dict = {}  # key = ty_period value = [нагрузки по схемам доставки на этот учебный период]
 
     # заполнение словаря terms
     for idx, value in tp_tpdl.items():
         # Заполняем словарь terms
-        terms_dict[value["tpdl_id"]] = get_terms(
+        tpd_chapters_dict[value["tpdl_id"]] = get_tc_id_for_check(
             tp_tpd_crossings=tp_tpd_crossings,
             tp_id=value["tp_id"],
             tpdl_id=value["tpdl_id"]
         )
 
-    for tpdl_id, terms in terms_dict.items():
-        # сравниваем количество учебных периодов у студента в схеме доставки  и количеством учебных периодов группы
-        if len(terms) != len(ty_periods):
+    tow_idxs = [1, 2, 6]    # индексы видов работ: 1 - лекции, 2 - лаб, 6 - практ
+    group_key = attrgetter("tc_tc_id", "tpdl_tpdl_id")  # поля класса, по которым будет производиться группироовка
+    tc_time_values = sorted(tc_time.values(), key=group_key)    # сортируем значение словаря полям group_key
+
+    # вместо totc_id делаем ключами словаря group_key
+    val_groups = {key: list(group) for key, group in groupby(tc_time_values, group_key)}
+
+    for tpdl_id, chapters in tpd_chapters_dict.items():
+        if len(chapters) != len(ty_periods):
             return False
 
-        for idx, ter_id in enumerate(terms):
-
-            # список со значением нагрузки
+        for idx, tc_id in enumerate(chapters):
             val_array = [0] * 7
 
-            # находим нагрузки по виду работ по заданным tpdl_id и ter_id
-            for value in tc_time.values():
-                if value.ter_id == ter_id and value.tpdl_tpdl_id == tpdl_id and value.tow_tow_id in [1, 2, 6]:
+            # Используем группированные значения
+            tc_group = val_groups.get((tc_id, tpdl_id), [])
+
+            for value in tc_group:
+                if value.tow_tow_id in tow_idxs:
                     val_array[value.tow_tow_id] = value.value
 
-            # раскидываем нагрузку по ty_period
-            if ty_periods[idx] in ch_value:
-                ch_value[ty_periods[idx]].append([val_array[1], val_array[2], val_array[6]])
+            ty_period = ty_periods[idx]
+            current_val_array = [val_array[1], val_array[2], val_array[6]]
+
+            if ty_period in ch_value:
+                ch_value[ty_period].append(current_val_array)
             else:
-                ch_value[ty_periods[idx]] = [[val_array[1], val_array[2], val_array[6]]]
+                ch_value[ty_period] = [current_val_array]
 
     # идем по всем ty_period
     # сравниваем значения нагрузок по значению
@@ -396,5 +397,6 @@ def get_div_for_dgr(ty_id: int, bch_id: int, dis_id: int) -> int | None:
                                 args={
                                     "DIS_ID": dis_id,
                                     "S_DIV_ID": s_div,
-                                    "CHARGE_DS": charge_ds},
+                                    "CHARGE_DS": charge_ds
+                                },
                                 return_cx_oracle_type=cx_Oracle.NUMBER)

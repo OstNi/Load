@@ -7,6 +7,7 @@ from log import _init_logger
 from oracle_table import *
 from tqdm import tqdm
 
+
 """
 Алгоритм выгрузки со стороны DIS_GROUP
 """
@@ -31,10 +32,7 @@ def create_stu_group(dis_group: dataclass, dgr_id: int) -> StuGroups | None:
                 logger.debug(f"Для группы dgr_id {dgr_id} не было созданого "
                              f"верхнего уровня dgr_dgr_id {dis_group.dgr_dgr_id}")
 
-        if hight_lvl:
-            sgr_id = hight_lvl.sgr_id
-        else:
-            sgr_id = None
+        sgr_id = hight_lvl.sgr_id if hight_lvl else None
 
         new_group = StuGroups.create(
             name=dis_group.fullname,
@@ -81,63 +79,77 @@ def create_tpr_chapters(tpdl_id: int, tc_chapters: dict) -> list:
     :return: объект класса TprChapters postgres_model.py
     """
     tpr_chapters = []
-    for tc_id, value in tc_chapters.items():
-        if value.tpdl_tpdl_id == tpdl_id and not model_contains(model=TprChapters, key="tc_id", values=tc_id):
+
+    # Получение всех связанных tc_id для tpdl_id
+    related_tc_ids = [tc_id for tc_id, value in tc_chapters.items() if value.tpdl_tpdl_id == tpdl_id]
+
+    # Получение существующих записей TprChapters для связанных tc_id
+    existing_tpr_chapters = TprChapters.select().where(TprChapters.tc_id.in_(related_tc_ids))
+    existing_tpr_chapters_map = {tpr_chapter.tc_id: tpr_chapter for tpr_chapter in existing_tpr_chapters}
+
+    # Создание или использование существующих записей TprChapters
+    for tc_id in related_tc_ids:
+        if tc_id not in existing_tpr_chapters_map:
             new_chapter = TprChapters.create(
                 tc_id=tc_id,
-                name=value.name,
-                ext_ext=value.exam,
-                srt=value.sort,
-                tpr_tpr=value.tp_tp_id,
+                name=tc_chapters[tc_id].name,
+                ext_ext=tc_chapters[tc_id].exam,
+                srt=tc_chapters[tc_id].sort,
+                tpr_tpr=tc_chapters[tc_id].tp_tp_id,
                 tpdl_tpdl=tpdl_id
             )
             tpr_chapters.append(new_chapter)
             logger.debug(f"CREATE: TPR_CHAPTER {new_chapter.tc_id}")
         else:
-            logger.debug(f"TAKE: TPR_CHAPTER {tc_id[0]}")
-            tpr_chapters.append(TprChapters.get(tc_id=tc_id[0]))
+            logger.debug(f"TAKE: TPR_CHAPTER {tc_id}")
+            tpr_chapters.append(existing_tpr_chapters_map[tc_id])
 
     return tpr_chapters
 
 
-def create_tc_time(tc_id: int, ty_id: int, tc_time: dict) -> list:
+def create_tc_time(tc_id: int, ty_id: int, tc_time: dict, tch_id: int ) -> list:
     """
     Создание модели TcTimes postgres_model.py
     :param tc_id: id учебного раздела
     :param ty_id: id учебного года
     :param tc_time: таблица TIME_OF_TPD_CHAPTER
+    :param tch_id: id TprChapter
     :return: объект класса TcTimes postgres_model.py
     """
 
     tc_time_lst = []
 
-    for totc_id, value in tc_time.items():
-        if value.tc_tc_id == tc_id:
-            # аргументы для oracle функции, которая сичтает количество точек контрроля
+    # Получение всех связанных totc_id для заданного tc_id
+    related_totc_ids = [totc_id for totc_id, value in tc_time.items() if value.tc_tc_id == tc_id]
+
+    # Получение существующих записей TcTimes для связанных totc_id
+    existing_tc_times = TcTimes.select().where(TcTimes.totc_id in related_totc_ids)
+    existing_tc_times_map = {tc_time.totc_id: tc_time for tc_time in existing_tc_times}
+
+    for totc_id in related_totc_ids:
+        if totc_id not in existing_tc_times_map:
             agrs_for_func = {
                 "P_TC_ID": tc_id,
-                "P_TOW_ID": value.tow_tow_id,
+                "P_TOW_ID": tc_time[totc_id].tow_tow_id,
                 "P_TY_ID": ty_id
             }
 
             count_of_ctl = call_oracle_function(function_name="tpd_t.GET_CTL_RPNT_CNT",
                                                 args=agrs_for_func,
                                                 return_cx_oracle_type=cx_Oracle.NUMBER)
+            new_tc_time = TcTimes.create(
+                totc_id=totc_id,
+                ctl_count=count_of_ctl if count_of_ctl else 0,
+                tch_tch=tch_id,
+                val=tc_time[totc_id].val,
+                wt_wot=tc_time[totc_id].tow_tow_id
+            )
 
-            if not model_contains(model=TcTimes, key="totc_id", values=totc_id):
-                new_tc_time = TcTimes.create(
-                    totc_id=totc_id,
-                    ctl_count=count_of_ctl if count_of_ctl else 0,
-                    tch_tch=TprChapters.get(tc_id=tc_id).tch_id,
-                    val=value.value,
-                    wt_wot=value.tow_tow_id
-                )
-
-                tc_time_lst.append(new_tc_time)
-                logger.debug(f"CREATE: TC_TIME {new_tc_time.totc_id}")
-            else:
-                logger.debug(f"TAKE: TC_TIME {totc_id[0]}")
-                tc_time_lst.append(TcTimes.get(totc_id=totc_id[0]))
+            tc_time_lst.append(new_tc_time)
+            logger.debug(f"CREATE: TC_TIME {new_tc_time.totc_id}")
+        else:
+            logger.debug(f"TAKE: TC_TIME {totc_id}")
+            tc_time_lst.append(existing_tc_times_map[totc_id])
 
     return tc_time_lst
 
@@ -286,26 +298,38 @@ def choice_of_branch(**kwargs):
     Выбор ветки выгрузки - электив, факультатив, дисциплина по выборру
     """
     if kwargs["dis_study"].tpdl_tpdl_id:
-        return elective_branch(kwargs["dis_study"].tpdl_tpdl_id)
+        return elective_branch(tpdl_id=kwargs["dis_study"].tpdl_tpdl_id,
+                               teach_program=kwargs["teach_program"],
+                               tp_delivery=kwargs["tp_deliveries"][kwargs["dis_study"].tpdl_tpdl_id])
     if kwargs["dis_study"].fcr_fcr_id:
-        return facultative_branch(kwargs["dis_study"].fcr_fcr_id, kwargs["fcr"])
+        return facultative_branch(fcr_id=kwargs["dis_study"].fcr_fcr_id,
+                                  fcr=kwargs["fcr"],
+                                  teach_program=kwargs["teach_program"],
+                                  tp_delivery=kwargs["tp_deliveries"][kwargs["dis_study"].tpdl_tpdl_id])
     return dpv_branch(**kwargs)
 
 
-def elective_branch(tpdl_id: int) -> TpDeliveries:
+def elective_branch(tpdl_id: int, tp_delivery: dataclass, teach_program: dict) -> TpDeliveries:
     """
     Ветка электива. Узнаем tpdl_id и создаем TpDeliveries с указанным tpdl_id
+    :param tpdl_id: id схемы доставки
+    :param tp_delivery: метакласс с полями таблицы и их значениями
+    :param teach_program: учебная программа. Нужна для во время создания TpDelivery
     :return: объект класса TpDeliveries postgres_model.py
     """
-    return create_tp_delivery(tpdl_id)
+    return create_tp_delivery(tpdl_id, tp_delivery, teach_program)
 
 
-def facultative_branch(fcr_id: int, fcr: dict) -> TpDeliveries:
+def facultative_branch(fcr_id: int, fcr: dict, tp_delivery: dataclass, teach_program: dict) -> TpDeliveries:
     """
     Ветка факультатива. Узнаем tpdl_id и создаем TpDeliveries с указанным tpdl_id
+    :param fcr_id: id FACULTATIVE_REQUESTS
+    :param fcr: FACULTATIVE_REQUESTS
+    :param tp_delivery: метакласс с полями таблицы и их значениями
+    :param teach_program: учебная программа. Нужна для во время создания TpDelivery
     :return: объект класса TpDeliveries postgres_model.py
     """
-    return create_tp_delivery(fcr[fcr_id].tpdl_tpdl_id)
+    return create_tp_delivery(fcr[fcr_id].tpdl_tpdl_id, tp_delivery, teach_program)
 
 
 def dpv_branch(**kwargs) -> TpDeliveries | None:
@@ -348,23 +372,42 @@ def main():
     version = create_version()
 
     start_time = datetime.now()
+    bar = tqdm(desc=f"[*] Выгрузка таблиц", total=16)
     # выгружаем все сущности
     dis_groups = get_dis_groups()
+    bar.update(1)
     dis_studies = get_table(table_name="DIS_STUDIES")
+    bar.update(1)
     disciplines = get_table(table_name="DISCIPLINES")
+    bar.update(1)
     dgr_students = get_table(table_name="DGR_STUDENTS")
+    bar.update(1)
     dgr_periods = get_table(table_name="DGR_PERIODS")
+    bar.update(1)
     dgr_works = get_table(table_name="DGR_WORKS")
+    bar.update(1)
     tpd_chapters = get_table(table_name="TPD_CHAPTERS")
+    bar.update(1)
     teach_programs = get_table(table_name="TEACH_PROGRAMS")
+    bar.update(1)
     tp_deliveries = get_table(table_name="TP_DELIVERIES")
+    bar.update(1)
     tp_tpd_crossings = get_tp_tpd_crossings()
+    bar.update(1)
     ty_periods = get_table(table_name="TY_PERIODS")
+    bar.update(1)
     terms = get_table(table_name="TERMS")
+    bar.update(1)
     tp_components = get_tp_components()
-    time_of_tpd_chapters = get_time_of_tpd_chapters()
+    bar.update(1)
+    time_of_tpd_chapters = get_table(table_name="TIME_OF_TPD_CHAPTERS")
+    bar.update(1)
     personal_records = get_personal_records()
+    bar.update(1)
     facultative_requests = get_table(table_name='FACULTATIVE_REQUESTS')
+    bar.update(1)
+    bar.set_description("Table loading completed")
+    bar.close()
 
     logger.debug(f"Время выгрузки словарей {datetime.now() - start_time}")
 
@@ -395,7 +438,7 @@ def main():
                         teach_program=teach_programs,
                         terms=terms,
                         tp_tpd_crossings=tp_tpd_crossings,
-                        time_of_tpd_chapters=time_of_tpd_chapters
+                        time_of_tpd_chapters=time_of_tpd_chapters,
                     )
                 ):
                     raise Exception(f"Не возможно создать TpDeliveries DGR_ID {dgr_id}")
@@ -426,9 +469,12 @@ def main():
                     )
 
                     # Создаем TC_TIME
-                    tc_time = create_tc_time(tc_id=tpr_chapter.tc_id,
-                                             ty_id=ty_periods[typ_id].ty_ty_id,
-                                             tc_time=time_of_tpd_chapters)
+                    tc_time = create_tc_time(
+                        tc_id=tpr_chapter.tc_id,
+                        ty_id=ty_periods[typ_id].ty_ty_id,
+                        tc_time=time_of_tpd_chapters,
+                        tch_id=tpr_chapter.tch_id
+                    )
 
                 # Создаем GROUP_WORKS
                 for value in dgr_works.values():
