@@ -7,7 +7,6 @@ from oracle_table import call_oracle_function
 from dataclasses import dataclass
 from math import ceil
 from itertools import groupby
-from itertools import groupby
 from operator import attrgetter
 import cx_Oracle
 
@@ -135,48 +134,6 @@ def get_dis_groups() -> dict:
     return get_table(table_name='DIS_GROUPS', where=where)
 
 
-def get_tpd_from_tpdl(tpdl_id: int) -> dict:
-    """
-    Все TPD_CHHAPTERS с конкретной tpdl_id
-    :param tpdl_id: id схемы доставки
-    :return: TPD_CHAPTERS: dict[tc_id] = dataclass(поле таблицы: значение)
-    """
-    where = f' WHERE table_aliace.tpdl_tpdl_id = {tpdl_id}' \
-            ' ORDER BY table_aliace.tc_id'
-    return get_table(table_name='TPD_CHAPTERS', where=where)
-
-
-def get_tc_time(tc_id: int) -> dict:
-    """
-    TIME_OF_TPD_CHAPTER по tc_id
-    :param tc_id: id tpd_chapter
-    :return: TIME_OF_TPD_CHAPTERS: dict[totc_id] = dataclass(поле таблицы: значение)
-    """
-    where = f"WHERE table_aliace.tc_tc_id = {tc_id} "
-
-    return get_table(table_name="TIME_OF_TPD_CHAPTERS", where=where)
-
-
-def get_teach_program(tp_id: int) -> dict:
-    """
-    TEACH_PROGRAM по tc_id
-    :param tp_id: id teach_program
-    :return: TEACH_PROGRAMS: dict[tp_id] = dataclass(поле таблицы: значение)
-    """
-    where = f"WHERE table_aliace.tp_id = {tp_id}"
-    return get_table(table_name="TEACH_PROGRAMS", where=where)
-
-
-def get_discipline(dis_id: int) -> dict:
-    """
-    DISCIPLINES по dis_id
-    :param dis_id: id discipline
-    :return: DISCIPLINES: dict[dis_id] = dataclass(поле таблицы: значение)
-    """
-    where = f" WHERE table_aliace.dis_id = {dis_id}"
-    return get_table(table_name="DISCIPLINES", where=where)
-
-
 def get_pr_list(dgr_id: int) -> list:
     """
     По id группы получаем список с id PERSONAL RECORD студентов этой группы
@@ -192,23 +149,6 @@ def get_pr_list(dgr_id: int) -> list:
     return pr_list
 
 
-def _get_teach_plan_id(pr_id: int) -> int:
-    """
-    По id (PERSONAL RECORD) узнаем учебный план студента
-    :param pr_id: id личного дела студента
-    :return: id учебного плана студента
-    """
-    select = " DEK.CURRENT_TFS(pr_id), table_aliace.* "
-    where = f" WHERE PR_ID = {pr_id} "
-    add_field = [('cur_tfs', int)]
-
-    tfs_dict = create_sql_table('PERSONAL_RECORDS', select=select, where=where, add_fields=add_field)
-    tfs_id = tfs_dict[list(tfs_dict.keys())[0]].cur_tfs
-
-    where = f' WHERE tfs_id = {tfs_id}'
-    return create_sql_table(table_name='TP_FOR_STUDENTS', where=where)[0].tpl_tp_id
-
-
 def get_ty_period_range(dis_group: dataclass, dgr_periods: dict) -> list[int]:
     """
     :param dis_group: dis_group
@@ -221,30 +161,6 @@ def get_ty_period_range(dis_group: dataclass, dgr_periods: dict) -> list[int]:
     )
 
 
-def get_tpdl_use_pr_dis(pr_id: int, dis_id: int) -> int | None:
-    """
-    Получаем схему доставки для дисциплины у студента
-    :param pr_id: id личной записи студента
-    :param dis_id: id дисциплины
-    :return: id схемы доставки
-    """
-    tp_id = _get_teach_plan_id(pr_id)
-    where = ',TERMS t ' \
-            ',TEACH_PROGRAMS tp ' \
-            'WHERE table_aliace.TER_TER_ID = t.TER_ID ' \
-            'AND table_aliace.TP_TP_ID = tp.TP_ID ' \
-            f'AND t.TP_TP_ID = {tp_id} ' \
-            f'AND tp.DIS_DIS_ID = {dis_id}'
-
-    request_table = create_sql_table(table_name='TP_COMPONENTS', where=where)
-
-    if not request_table:
-        logger.debug(f' Для pr_id: {pr_id} и dis_id: {dis_id} не существует TP_COMPONENT')
-        return None
-
-    return request_table[0].tpdl_tpdl_id if request_table[0].tpdl_tpdl_id else None
-
-
 def get_tc_id_for_check(tp_tpd_crossings: dict, tp_id: int, tpdl_id: int) -> list:
     """
     :param tp_tpd_crossings: TP_TPD_CROSSINGS - сущность пересечения tpd_chhapter и terms
@@ -255,51 +171,6 @@ def get_tc_id_for_check(tp_tpd_crossings: dict, tp_id: int, tpdl_id: int) -> lis
     """
 
     return sorted(value.tc_tc_id for value in tp_tpd_crossings.values() if value.tpl_id == tp_id and value.tpdl_id == tpdl_id)
-
-
-def get_dis_studies(dss_id: int) -> dict:
-    """
-    DIS_STUDIES на 2022 учебный период
-    :return: DIS_STUDIES: dict[dds_id] = dataclass(поле таблицы: значение)
-    """
-    where = 'WHERE EXISTS (' \
-            'SELECT * ' \
-            'FROM DGR_PERIODS dp ' \
-            ',TY_PERIODS tp ' \
-            'WHERE  dp.TYP_TYP_ID = tp.TYP_ID ' \
-            'AND tp.ty_ty_id = 2022 ' \
-            'AND dp.DSS_DSS_ID = table_aliace.dss_id) ' \
-            f'AND table_aliace.dss_id = {dss_id}'
-
-    return get_table(table_name='DIS_STUDIES', where=where)
-
-
-def get_tpdl_for_fac(fcr_id: int) -> int:
-    """
-    TPDL_ID для DIS_STUDY с типом 'факультатив'
-    :param fcr_id:
-    :return: tpdl_id
-    """
-    where = f'WHERE table_aliace.FCR_ID = {fcr_id}'
-    fac_req = get_table(table_name='FACULTATIVE_REQUESTS', where=where)
-
-    return fac_req[(fcr_id,)].tpdl_tpdl_id
-
-
-def type_of_work(dgr_id: int) -> list[int]:
-    """
-    Получаем тип работы для группы
-    :param dgr_id: id группы
-    :return: list с id типа работы
-    """
-    where = ' WHERE EXISTS (' \
-            'SELECT * ' \
-            'FROM DGR_WORKS dw ' \
-            f'WHERE dw.DGR_DGR_ID = {dgr_id} ' \
-            'AND dw.TOW_TOW_ID  = table_aliace.TOW_ID )'
-
-    oracle_type_of_work = get_table(table_name='TYPE_OF_WORKS', where=where)
-    return [key[0] for key in oracle_type_of_work.keys()]
 
 
 def checker(
