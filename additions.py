@@ -25,3 +25,15 @@ def range_ty_period(start: int, stop: int) -> list[int]:
         ty_list.append(cur_ty)
 
     return ty_list
+
+
+def get_num_of_course(start_crs: int, start_ty_period: int, teach_year: int) -> int:
+    """
+    Номер курса для GROUP_FACULTY
+    :param start_crs: номер курса начала изучения дисциплины
+    :param start_ty_period: ty_period начала изучения дисциплины
+    :param teach_year: нужный учебный год
+    :return: num of course
+    """
+    return start_crs + (teach_year - int(str(start_ty_period)[:-1]))
+
