@@ -21,7 +21,7 @@ def _init_logger(name, filename: str | None = None):
         backupCount=1
     )
     fh.setFormatter(logging.Formatter(format))
-    fh.setLevel(logging.DEBUG)
+    fh.setLevel(logging.ERROR)
     logger.addHandler(sh)
     logger.addHandler(fh)
 
