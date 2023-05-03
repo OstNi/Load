@@ -1,12 +1,13 @@
-import cx_Oracle
 from postgres_model import *
 from dis_group import *
-from dataclasses import dataclass
-from datetime import datetime
 from log import _init_logger
 from oracle_table import *
-from tqdm import tqdm
+from additions import get_num_of_course
+from exceptions import *
 
+from dataclasses import dataclass
+from datetime import datetime
+from tqdm import tqdm
 
 """
 Алгоритм выгрузки со стороны DIS_GROUP
@@ -29,8 +30,8 @@ def create_stu_group(dis_group: dataclass, dgr_id: int) -> StuGroups | None:
         hight_lvl = None
         if dis_group.dgr_dgr_id:
             if not (hight_lvl := StuGroups.get_or_none(dgr_id=dis_group.dgr_dgr_id)):
-                logger.debug(f"Для группы dgr_id {dgr_id} не было созданого "
-                             f"верхнего уровня dgr_dgr_id {dis_group.dgr_dgr_id}")
+                raise StuGroupExc(f"Для группы dgr_id {dgr_id} не было созданого"
+                                  f"верхнего уровня dgr_dgr_id {dis_group.dgr_dgr_id}")
 
         sgr_id = hight_lvl.sgr_id if hight_lvl else None
 
@@ -42,7 +43,6 @@ def create_stu_group(dis_group: dataclass, dgr_id: int) -> StuGroups | None:
         logger.debug(f"CREATE: STU_GROUP {new_group.sgr_id}")
         return new_group
 
-    logger.debug("FAIL: STU_GROUP was not created")
     return None
 
 
@@ -107,7 +107,7 @@ def create_tpr_chapters(tpdl_id: int, tc_chapters: dict) -> list:
     return tpr_chapters
 
 
-def create_tc_time(tc_id: int, ty_id: int, tc_time: dict, tch_id: int ) -> list:
+def create_tc_time(tc_id: int, ty_id: int, tc_time: dict, tch_id: int) -> list:
     """
     Создание модели TcTimes postgres_model.py
     :param tc_id: id учебного раздела
@@ -141,7 +141,7 @@ def create_tc_time(tc_id: int, ty_id: int, tc_time: dict, tch_id: int ) -> list:
                 totc_id=totc_id,
                 ctl_count=count_of_ctl if count_of_ctl else 0,
                 tch_tch=tch_id,
-                val=tc_time[totc_id].val,
+                val=tc_time[totc_id].value,
                 wt_wot=tc_time[totc_id].tow_tow_id
             )
 
@@ -231,42 +231,61 @@ def create_group_work(sgr_id: int, type_of_work_id: int) -> GroupWorks:
     return new_group_work
 
 
-def create_group_faculty(dis_groups: dict, dgr_id: int, sgr_id: int) -> None:
+def create_group_faculty(
+        dis_groups: dict,
+        dgr_id: int,
+        sgr_id: int,
+        personal_info: dict,
+        dgr_students: dict,
+        table_for_num_of_course: dict
+) -> list | None:
     """
     Создание моделей GroupFaculties postgres_model.py
     :param dis_groups: все DIS_GROUP
     :param dgr_id: id текущей группы
+    :param personal_info: словарь с div_id, edu_lvl и foe_id для каждого студента
     :param sgr_id: id stu_group
+    :param dgr_students: нужен для поиска студентов в группе
+    :param table_for_num_of_course: dict[pr_id, dgr_id]: start_crs, start_typ_id
     """
 
     # Если это не нижний уровень, то не создаем  GROUP_FACULTY
     if not is_low_dgr_group(dis_groups, dgr_id):
         return
 
-    pl_list = get_pr_list(dgr_id)
+    group_faculties = []
+    pl_list = {value.pr_pr_id for value in dgr_students.values() if value.dgr_dgr_id == dgr_id}
     dif_group_fuculty = dict()
     for pr_item in pl_list:
-        data = get_group_faculty_info(pr_item)
-        div_id, foe_id, edu_lvl = data["div_id"], data["foe_id"], data["edu_lvl"]
+        data = personal_info[pr_item]
 
         # группируем и считаем студентов по трем параметрам: div_id, foe_id, edu_lvl
-        if (div_id, foe_id, edu_lvl) in dif_group_fuculty:
-            dif_group_fuculty[(div_id, foe_id, edu_lvl)] += 1
+        if (data.div_id, data.foe_id, data.edu_lvl) in dif_group_fuculty:
+            dif_group_fuculty[(data.div_id, data.foe_id, data.edu_lvl)]["count"] += 1
         else:
-            dif_group_fuculty[(div_id, foe_id, edu_lvl)] = 1
+            dif_group_fuculty[(data.div_id, data.foe_id, data.edu_lvl)] = {"count": 1, "pr_id": pr_item}
 
     for info, value in dif_group_fuculty.items():
         # Создаем GROUP_FACULTY
+        data = table_for_num_of_course.get((value["pr_id"], dgr_id), [])[0]
+
+        start_crs = data.start_crs
+        start_typ_id = data.start_typ_id
+        teach_years = 2022
+
         new_group_faculty = GroupFaculties.create(
             efo_efo=info[1],
-            stu_count=value,
-            num_course=get_num_of_course(dgr_id[0]),
+            stu_count=value["count"],
+            num_course=get_num_of_course(start_crs, start_typ_id, teach_years),
             sgr_sgr=sgr_id,
             div_div=info[0],
             ele_ele=info[2]
         )
 
         logger.debug(f"CREATE: GROUP_FACULTY {new_group_faculty.grf_id}")
+        group_faculties.append(new_group_faculty)
+
+    return group_faculties
 
 
 def is_low_dgr_group(dis_groups: dict, dgr_id: int) -> bool:
@@ -298,29 +317,18 @@ def choice_of_branch(**kwargs):
     Выбор ветки выгрузки - электив, факультатив, дисциплина по выборру
     """
     if kwargs["dis_study"].tpdl_tpdl_id:
-        return elective_branch(tpdl_id=kwargs["dis_study"].tpdl_tpdl_id,
-                               teach_program=kwargs["teach_program"],
-                               tp_delivery=kwargs["tp_deliveries"][kwargs["dis_study"].tpdl_tpdl_id])
+        return create_tp_delivery(tpdl_id=kwargs["dis_study"].tpdl_tpdl_id,
+                                  teach_program=kwargs["teach_program"],
+                                  tp_delivery=kwargs["tp_deliveries"][kwargs["dis_study"].tpdl_tpdl_id])
     if kwargs["dis_study"].fcr_fcr_id:
         return facultative_branch(fcr_id=kwargs["dis_study"].fcr_fcr_id,
                                   fcr=kwargs["fcr"],
                                   teach_program=kwargs["teach_program"],
-                                  tp_delivery=kwargs["tp_deliveries"][kwargs["dis_study"].tpdl_tpdl_id])
+                                  tp_delivery=kwargs["tp_deliveries"])
     return dpv_branch(**kwargs)
 
 
-def elective_branch(tpdl_id: int, tp_delivery: dataclass, teach_program: dict) -> TpDeliveries:
-    """
-    Ветка электива. Узнаем tpdl_id и создаем TpDeliveries с указанным tpdl_id
-    :param tpdl_id: id схемы доставки
-    :param tp_delivery: метакласс с полями таблицы и их значениями
-    :param teach_program: учебная программа. Нужна для во время создания TpDelivery
-    :return: объект класса TpDeliveries postgres_model.py
-    """
-    return create_tp_delivery(tpdl_id, tp_delivery, teach_program)
-
-
-def facultative_branch(fcr_id: int, fcr: dict, tp_delivery: dataclass, teach_program: dict) -> TpDeliveries:
+def facultative_branch(fcr_id: int, fcr: dict, tp_delivery: dict, teach_program: dict) -> TpDeliveries:
     """
     Ветка факультатива. Узнаем tpdl_id и создаем TpDeliveries с указанным tpdl_id
     :param fcr_id: id FACULTATIVE_REQUESTS
@@ -329,7 +337,11 @@ def facultative_branch(fcr_id: int, fcr: dict, tp_delivery: dataclass, teach_pro
     :param teach_program: учебная программа. Нужна для во время создания TpDelivery
     :return: объект класса TpDeliveries postgres_model.py
     """
-    return create_tp_delivery(fcr[fcr_id].tpdl_tpdl_id, tp_delivery, teach_program)
+    return create_tp_delivery(
+        tpdl_id=fcr[fcr_id].tpdl_tpdl_id,
+        tp_delivery=tp_delivery[fcr[fcr_id].tpdl_tpdl_id],
+        teach_program=teach_program
+    )
 
 
 def dpv_branch(**kwargs) -> TpDeliveries | None:
@@ -343,12 +355,18 @@ def dpv_branch(**kwargs) -> TpDeliveries | None:
     low_dgr_id = find_low_lvl_group(kwargs["dis_groups"], kwargs["dgr_id"])
 
     # Создаем множество из учебных планов всех студентов нижнего уровня группы
-    tp_set = {kwargs["personal_records"][value.pr_pr_id].tp_id for value in kwargs["dgr_students"].values() if value.dgr_dgr_id == low_dgr_id}
+    tp_set = {kwargs["personal_records"][value.pr_pr_id].tp_id for value in kwargs["dgr_students"].values() if
+              value.dgr_dgr_id == low_dgr_id}
 
     # Создаем множество со схемами доставки группы
-    tpdl_set = {value.tpdl_tpdl_id for tp_id in tp_set for key, value in kwargs["tp_components"].items() if value.tpl_id == tp_id and value.dis_id == kwargs["dis_id"]}
+    tpdl_set = {value.tpdl_tpdl_id for tp_id in tp_set for key, value in kwargs["tp_components"].items() if
+                value.tpl_id == tp_id and value.dis_id == kwargs["dis_id"]}
 
-    tpdl_tp_dict = {idx: {"tp_id": tp_id, "tpdl_id": tpdl_id} for idx, (tp_id, tpdl_id) in enumerate(zip(tp_set, tpdl_set))}
+    tpdl_tp_dict = {idx: {"tp_id": tp_id, "tpdl_id": tpdl_id} for idx, (tp_id, tpdl_id) in
+                    enumerate(zip(tp_set, tpdl_set))}
+
+    if len(tpdl_tp_dict) == 0:
+        raise TpDeliveryExc(f"Нет студентов на нижнем уровне dgr_id: {kwargs['dgr_id']}")
 
     # Сравниваем учебные нагрузки среди студентов группы
     if not checker(
@@ -358,21 +376,20 @@ def dpv_branch(**kwargs) -> TpDeliveries | None:
             tp_tpd_crossings=kwargs["tp_tpd_crossings"],
             tc_time=kwargs["time_of_tpd_chapters"]
     ):
-        logger.debug(f"Разная учебная нагрузка у студентов группы {kwargs['dgr_id']}")
-        return None
+        raise TpDeliveryExc(f"Разная учебная нагрузка у студентов группы {kwargs['dgr_id']}")
+
     # Выбираем первую tpdl
     tpdl_id = tpdl_tp_dict[0]["tpdl_id"]
-    return create_tp_delivery(tpdl_id=tpdl_id, tp_delivery=kwargs["tp_deliveries"][tpdl_id], teach_program=kwargs["teach_program"])
+    return create_tp_delivery(tpdl_id=tpdl_id, tp_delivery=kwargs["tp_deliveries"][tpdl_id],
+                              teach_program=kwargs["teach_program"])
 
 
 def main():
-    # logger.debug("---START OF LOADING---")
-
-    # Создаем VERSION
-    version = create_version()
+    logger.debug("---START OF LOADING---")
 
     start_time = datetime.now()
-    bar = tqdm(desc=f"[*] Выгрузка таблиц", total=16)
+    bar = tqdm(desc=f"[*] Выгрузка таблиц", total=18)
+
     # выгружаем все сущности
     dis_groups = get_dis_groups()
     bar.update(1)
@@ -402,14 +419,22 @@ def main():
     bar.update(1)
     time_of_tpd_chapters = get_table(table_name="TIME_OF_TPD_CHAPTERS")
     bar.update(1)
+    table_for_num_of_course = get_table_for_num_of_course()  # таблица, в которой храниться start_crs и start_typ_id
+    bar.update(1)
     personal_records = get_personal_records()
+    bar.update(1)
+    personal_info = get_group_faculty_info()  # форма обучения, факультет и edu_lvl студентов
     bar.update(1)
     facultative_requests = get_table(table_name='FACULTATIVE_REQUESTS')
     bar.update(1)
+
     bar.set_description("Table loading completed")
     bar.close()
 
     logger.debug(f"Время выгрузки словарей {datetime.now() - start_time}")
+
+    # Создаем VERSION
+    version = create_version()
 
     bar = tqdm(desc=f"[*] Процесс выгрузки", total=len(dis_groups))
     for dgr_id, dis_group in dis_groups.items():
@@ -418,9 +443,11 @@ def main():
         if dis_study.foe_foe_id != 1:  # если это не очная форма обучения, пропускаем
             continue
 
-        # logger.debug(f"{'-' * 5}LOADING OF GROUP {dgr_id}{'-' * 5}")
+        logger.debug(f"{'-' * 5}LOADING OF GROUP {dgr_id}{'-' * 5}")
         with database.atomic() as transaction:
             try:
+                start_time = datetime.now()
+
                 # Создаем Disciplines
                 create_discipline(dis_id=dis_study.dis_dis_id, discipline=disciplines[dis_study.dis_dis_id])
 
@@ -439,20 +466,19 @@ def main():
                         terms=terms,
                         tp_tpd_crossings=tp_tpd_crossings,
                         time_of_tpd_chapters=time_of_tpd_chapters,
-                    )
+                )
                 ):
-                    raise Exception(f"Не возможно создать TpDeliveries DGR_ID {dgr_id}")
+                    raise TpDeliveryExc(f"Невозможно создать TpDeliveries DGR_ID {dgr_id}")
 
                 # Создаем STU_GROUP если группа уже создана, то пропускаем
                 if not (stu_group := create_stu_group(dis_group, dgr_id)):
-                    raise Exception(f"StuGroup уже создана DGR_ID {dgr_id}")
+                    raise StuGroups(f"Невозможно создать StuGroup DGR_ID {dgr_id}")
 
                 # Создаем TPD_CHAPTERS
                 tpr_chapters = create_tpr_chapters(tpdl_id=tp_delivery.tpdl_id, tc_chapters=tpd_chapters)
 
                 # Создаем DGR_PERIOD на каждый ty_period, в котором обучается группа
                 for typ_id, tpr_chapter in zip(get_ty_period_range(dis_group, dgr_periods), tpr_chapters):
-
                     div_for_dgr = get_div_for_dgr(
                         ty_id=ty_periods[typ_id].ty_ty_id,
                         bch_id=dis_studies[dis_group.dss_dss_id].bch_bch_id,
@@ -482,17 +508,29 @@ def main():
                         group_work = create_group_work(stu_group.sgr_id, value.tow_tow_id)
 
                 # Создаем GROUP_FACULTY
-                create_group_faculty(dis_groups=dis_groups, dgr_id=dgr_id, sgr_id=stu_group.sgr_id)
+                group_faculties = create_group_faculty(
+                    dis_groups=dis_groups,
+                    dgr_id=dgr_id,
+                    sgr_id=stu_group.sgr_id,
+                    personal_info=personal_info,
+                    dgr_students=dgr_students,
+                    table_for_num_of_course=table_for_num_of_course
+                )
 
-                # logger.debug(f"SUCCESS: для STU_GROUP {stu_group.sgr_id} была успешно создана из DIS_GROUP {key[0]}")
-                # transaction.commit()
+                logger.debug(f"SUCCESS: для STU_GROUP {stu_group.sgr_id} была успешно создана из DIS_GROUP {dgr_id}")
+                transaction.commit()
+
+            except (StuGroupExc, TpDeliveryExc) as e:
+                logger.error(f'ALERT: {e} для DIS_GROUP с dgr_id {dgr_id}')
+                transaction.rollback()
 
             except Exception as e:
-                logger.debug(f'ERROR: {e} для DIS_GROUP с dgr_id {dgr_id}')
+                logger.error(f'ERROR: {e} для DIS_GROUP с dgr_id {dgr_id}')
                 transaction.rollback()
 
             finally:
                 bar.update(1)
+                logger.debug(f"Время выгрузки группы {dgr_id}: {datetime.now() - start_time}")
 
     bar.close()
 
