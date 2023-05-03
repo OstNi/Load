@@ -1,11 +1,10 @@
 # Подготовка данных для выгрузки со стороны DIS_GROUP
-from oracle_table import get_table, create_sql_table
+from oracle_table import get_table
 from log import _init_logger
 from additions import range_ty_period
 from oracle_table import call_oracle_function
 
 from dataclasses import dataclass
-from math import ceil
 from itertools import groupby
 from operator import attrgetter
 import cx_Oracle
@@ -64,11 +63,10 @@ def get_tp_tpd_crossings():
     return get_table(table_name="TP_TPD_CROSSINGS", where=where, select=select, add_fields=add_field)
 
 
-def get_group_faculty_info(pr_id: int) -> dict:
+def get_group_faculty_info() -> dict:
     """
-    Получаем DIVISION, EDUCATION_FORM and
-    :param pr_id: id личной записи студента
-    :return: dict{"div_id": value, "foe_id": velue}
+    Получаем DIVISION, EDUCATION_FORM and EDU_LVL
+    :return: dict[pr_id]: edu_lvl, foe_id, div_id
     """
     add_field = [("div_id", int), ("foe_id", int), ("edu_lvl", int)]
     select = "ffd.div_div_id, ffs.foe_foe_id, tos.TOS_ID, table_aliace.*"
@@ -79,41 +77,30 @@ def get_group_faculty_info(pr_id: int) -> dict:
             ",type_of_ses tos " \
             "where table_aliace.ffd_ffd_id=ffd_id " \
             "and ffd.ffs_ffs_id=ffs_id " \
-            f"AND table_aliace.PR_ID = {pr_id} " \
             "AND s.SP_ID = ffs.SP_SP_ID " \
             "AND tos.tos_id = s.TOS_TOS_ID "
 
-    info = create_sql_table(table_name="personal_records", select=select, where=where, add_fields=add_field)
-
-    return {"div_id": info[0].div_id, "foe_id": info[0].foe_id, "edu_lvl": info[0].edu_lvl}
+    return get_table(table_name="PERSONAL_RECORDS", select=select, where=where, add_fields=add_field)
 
 
-def get_num_of_course(dgr_id: int) -> int:
-    """
-    :param dgr_id: id группы
-    :return: номер курса обучения
-    """
-    pr_lst = get_pr_list(dgr_id)  # список студентов группы
+def get_table_for_num_of_course():
+    select = "dgp_start.typ_typ_id, table_aliace.*"
+    where = " join dgr_periods dgp_start " \
+            "on(table_aliace.dgp_start_id=dgp_start.dgp_id) " \
+            "join dis_groups dgr " \
+            "on(table_aliace.dgr_dgr_id=dgr.dgr_id) " \
+            "join dgr_periods dgp_stop " \
+            "on(coalesce(table_aliace.dgp_stop_id,dgr.dgp_stop_id)=dgp_stop.dgp_id) "
+    add_field = [("start_typ_id", int)]
 
-    # берем первого студента и узнаем номер текущего триметра
-    where = "WHERE EXISTS ( " \
-            "SELECT * " \
-            "FROM PERSONAL_RECORDS pr " \
-            f"WHERE pr.PR_ID = {pr_lst[0]} " \
-            "AND DEK.CURRENT_TFS(pr.PR_ID) = table_aliace.TFS_ID)"
+    additions_table = get_table(table_name="DGR_STUDENTS", select=select, where=where, add_fields=add_field)
+    group_key = attrgetter("pr_pr_id", "dgr_dgr_id")  # поля класса, по которым будет производиться группироовка
 
-    tfs = get_table(table_name="TP_FOR_STUDENTS", where=where)
-    tfs_id = list(tfs.keys())[0]
+    # сортируем значение словаря полям group_key
+    additions_table_values = sorted(additions_table.values(), key=group_key)
 
-    return ceil(tfs[tfs_id].current_term / 3)  # округляем в большую сторону (текущий трим / 3)
-
-
-def get_count_of_students(dgr_id: int) -> int:
-    """
-    :param dgr_id: id группы
-    :return: количество студентов в DIS_GROUP
-    """
-    return len(get_pr_list(dgr_id))
+    # вместо totc_id делаем ключами словаря group_key
+    return {key: list(group) for key, group in groupby(additions_table_values, group_key)}
 
 
 def get_dis_groups() -> dict:
@@ -132,21 +119,6 @@ def get_dis_groups() -> dict:
             'ORDER BY table_aliace.dgr_id'
 
     return get_table(table_name='DIS_GROUPS', where=where)
-
-
-def get_pr_list(dgr_id: int) -> list:
-    """
-    По id группы получаем список с id PERSONAL RECORD студентов этой группы
-    :param dgr_id: id группы
-    :return: список pr_id всех студентов группы
-    """
-    where = f' WHERE dgr_dgr_id = {dgr_id}'
-    dgr_students = get_table('DGR_STUDENTS', where=where)
-    pr_list = []
-    for i in dgr_students.keys():
-        pr_list.append(dgr_students[i].pr_pr_id)
-
-    return pr_list
 
 
 def get_ty_period_range(dis_group: dataclass, dgr_periods: dict) -> list[int]:
@@ -260,8 +232,6 @@ def get_div_for_dgr(ty_id: int, bch_id: int, dis_id: int) -> int | None:
     s_div = call_oracle_function(function_name="ffd_pkg.BCH_TO_SDIV",
                                  args={"P_BCH_ID": bch_id},
                                  return_cx_oracle_type=cx_Oracle.NUMBER)
-
-    logger.debug(f"{charge_ds=}, {s_div=}, {dis_id=}")
 
     # закрепление по приказу
     return call_oracle_function(function_name="calc_charge.dis_for_div",
