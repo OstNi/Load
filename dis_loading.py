@@ -300,16 +300,25 @@ def is_low_dgr_group(dis_groups: dict, dgr_id: int) -> bool:
     return False
 
 
-def find_low_lvl_group(dis_groups: dict, dgr_id: int) -> int:
-    """
-    Находи нижний уровень DIS_GROUPS (студенты есть только на нижних уровнях)
-    :param dis_groups: все DIS_GROUPS группы
-    :param dgr_id: id DIS_GROUP
-    :return: dgr_id группы нижнего уровня
-    """
-    if not any(value.dgr_dgr_id == dgr_id for value in dis_groups.values()):
-        return dgr_id
-    return find_low_lvl_group(dis_groups, dis_groups[dgr_id].dgr_dgr_id)
+def child_dgr_id(dis_groups: dict, dgr_id: int) -> list:
+    child = []
+
+    def find_child(dis_groups: dict, dgr_id: int):
+        """
+        Находи нижний уровень DIS_GROUPS (студенты есть только на нижних уровнях)
+        :param dis_groups: все DIS_GROUPS группы
+        :param dgr_id: id DIS_GROUP
+        :return: dgr_id группы нижнего уровня
+        """
+        child_dgr_id = [key for key, value in dis_groups.items() if value.dgr_dgr_id == dgr_id]
+        if len(child_dgr_id) == 0:
+            nonlocal child
+            child.append(dgr_id)
+        else:
+            for item in child_dgr_id:
+                find_child(dis_groups, item)
+    find_child(dis_groups, dgr_id)
+    return child
 
 
 def choice_of_branch(**kwargs):
@@ -352,11 +361,10 @@ def dpv_branch(**kwargs) -> TpDeliveries | None:
     """
 
     # Находим нижний уровень этого дерева (только на нижнем уровне есть связь со студентами)
-    low_dgr_id = find_low_lvl_group(kwargs["dis_groups"], kwargs["dgr_id"])
+    low_dgr_id = child_dgr_id(kwargs["dis_groups"], kwargs["dgr_id"])
 
     # Создаем множество из учебных планов всех студентов нижнего уровня группы
-    tp_set = {kwargs["personal_records"][value.pr_pr_id].tp_id for value in kwargs["dgr_students"].values() if
-              value.dgr_dgr_id == low_dgr_id}
+    tp_set = {kwargs["personal_records"][value.pr_pr_id].tp_id for dgr_group in low_dgr_id for value in kwargs["dgr_students"].values() if value.dgr_dgr_id == dgr_group}
 
     # Создаем множество со схемами доставки группы
     tpdl_set = {value.tpdl_tpdl_id for tp_id in tp_set for key, value in kwargs["tp_components"].items() if
@@ -439,6 +447,9 @@ def main():
     bar = tqdm(desc=f"[*] Процесс выгрузки", total=len(dis_groups))
     for dgr_id, dis_group in dis_groups.items():
         dis_study = dis_studies[dis_group.dss_dss_id]
+
+        if dgr_id not in [15770]:
+            continue
 
         if dis_study.foe_foe_id != 1:  # если это не очная форма обучения, пропускаем
             continue
