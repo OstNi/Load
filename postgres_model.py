@@ -1,14 +1,9 @@
 from peewee import *
-from log import _init_logger
-import logging
 
 """
 Описание postgres моделей
 """
 
-# init logger
-_init_logger('load')
-logger = logging.getLogger('postgres_model.main')
 
 # Connect
 database = PostgresqlDatabase('postgres', **{'host': 'localhost', 'port': 5432, 'user': 'postgres', 'password': ''})
