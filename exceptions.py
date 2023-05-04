@@ -32,3 +32,7 @@ class GroupWorkExc(Exception):
 
 class GroupFacultyExc(Exception):
     pass
+
+
+class VersionExc(Exception):
+    pass
