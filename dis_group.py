@@ -1,10 +1,9 @@
 # Подготовка данных для выгрузки со стороны DIS_GROUP
 from oracle_table import get_table
-from log import _init_logger
-from additions import range_ty_period
 from oracle_table import call_oracle_function
+from exceptions import *
+import config
 
-from dataclasses import dataclass
 from itertools import groupby
 from operator import attrgetter
 import cx_Oracle
@@ -13,9 +12,6 @@ import cx_Oracle
 """
 Функции для выгрузки данных со стороны DIS_GROUP
 """
-
-# инициализируем лог
-logger = _init_logger(name="dis_group", filename="dis_group.log")
 
 
 def get_personal_records() -> get_table:
@@ -32,6 +28,18 @@ def get_personal_records() -> get_table:
     add_field = [('tp_id', int)]
 
     return get_table(table_name="PERSONAL_RECORDS", where=where, select=select, add_fields=add_field)
+
+
+def get_tc_time_for_check(tc_time: dict) -> dict:
+    """
+    dict TcTime c ключами ("tc_tc_id", "tpdl_tpdl_id")
+    :param tc_time: исходная таюлица TIME_OF_TPD_CHAPTERS
+    """
+    group_key = attrgetter("tc_tc_id", "tpdl_tpdl_id")  # поля класса, по которым будет производиться группироовка
+    tc_time_values = sorted(tc_time.values(), key=group_key)  # сортируем значение словаря полям group_key
+
+    # вместо totc_id делаем ключами словаря group_key
+    return {key: list(group) for key, group in groupby(tc_time_values, group_key)}
 
 
 def get_tp_components() -> get_table:
@@ -114,23 +122,11 @@ def get_dis_groups() -> dict:
             'FROM DGR_PERIODS dp ' \
             ',TY_PERIODS tp ' \
             'WHERE  dp.TYP_TYP_ID = tp.TYP_ID ' \
-            'AND tp.ty_ty_id = 2022 ' \
+            f'AND tp.ty_ty_id = {config.TEACH_YEAR} ' \
             'AND dp.DSS_DSS_ID = table_aliace.dss_dss_id)' \
             'ORDER BY table_aliace.dgr_id'
 
     return get_table(table_name='DIS_GROUPS', where=where)
-
-
-def get_ty_period_range(dis_group: dataclass, dgr_periods: dict) -> list[int]:
-    """
-    :param dis_group: dis_group
-    :param dgr_periods: DGR_PERIOD (по нему узнаем периоды начала и конца)
-    :return: список ty_periods от начала дисциплины до конца
-    """
-    return range_ty_period(
-        start=dgr_periods[dis_group.dgp_start_id].typ_typ_id,
-        stop=dgr_periods[dis_group.dgp_stop_id].typ_typ_id
-    )
 
 
 def get_tc_id_for_check(tp_tpd_crossings: dict, tp_id: int, tpdl_id: int) -> list:
@@ -147,16 +143,16 @@ def get_tc_id_for_check(tp_tpd_crossings: dict, tp_id: int, tpdl_id: int) -> lis
 
 def checker(
         tp_tpdl: dict,
-        dis_group: dataclass,
         dgr_periods: dict,
         tp_tpd_crossings: dict,
-        tc_time: dict
+        sorted_tc_time: dict,
+        dss_id: int
 ) -> bool:
     """
     Проверяем наличие различия нагрузки по часам у лекции, практик и лаб у студентов одной группы
     :return: True - нагрузка одинаковая / False - нагрузка разная
     """
-    ty_periods: list[int] = get_ty_period_range(dis_group=dis_group, dgr_periods=dgr_periods)  # учебные периоды группы
+    ty_periods: list[int] = get_ty_periods(dss_id=dss_id, dgr_periods=dgr_periods)  # учебные периоды группы
     tpd_chapters_dict: dict = {}  # key = tpdl_id, value = [tc_id]
     ch_value: dict = {}  # key = ty_period value = [нагрузки по схемам доставки на этот учебный период]
 
@@ -169,25 +165,19 @@ def checker(
             tpdl_id=value["tpdl_id"]
         )
 
-    tow_idxs = [1, 2, 6]    # индексы видов работ: 1 - лекции, 2 - лаб, 6 - практ
-    group_key = attrgetter("tc_tc_id", "tpdl_tpdl_id")  # поля класса, по которым будет производиться группироовка
-    tc_time_values = sorted(tc_time.values(), key=group_key)    # сортируем значение словаря полям group_key
-
-    # вместо totc_id делаем ключами словаря group_key
-    val_groups = {key: list(group) for key, group in groupby(tc_time_values, group_key)}
-
     for tpdl_id, chapters in tpd_chapters_dict.items():
         if len(chapters) != len(ty_periods):
-            return False
+            raise TpDeliveryExc(f"Количество учебных периодов (TY_PERIODS: {len(ty_periods)}) "
+                                f"не равно количеству учебных разделов (TPD_CHAPTERS: {len(chapters)})")
 
         for idx, tc_id in enumerate(chapters):
             val_array = [0] * 7
 
             # Используем группированные значения
-            tc_group = val_groups.get((tc_id, tpdl_id), [])
+            tc_group = sorted_tc_time.get((tc_id, tpdl_id), [])
 
             for value in tc_group:
-                if value.tow_tow_id in tow_idxs:
+                if value.tow_tow_id in config.CHECKER_TOW:
                     val_array[value.tow_tow_id] = value.value
 
             ty_period = ty_periods[idx]
@@ -211,8 +201,29 @@ def checker(
         for col in range(len(ch_value[ty_period][0])):
             for row in range(1, len(ch_value[ty_period])):
                 if ch_value[ty_period][row][col] != ch_value[ty_period][0][col]:
-                    return False
+                    raise TpDeliveryExc(f"Разная учебная нагрузка tpdl_id: {tpd_chapters_dict.keys()} ")
     return True
+
+
+def get_num_of_course(start_crs: int, start_ty_period: int, teach_year: int) -> int:
+    """
+    Номер курса для GROUP_FACULTY
+    :param start_crs: номер курса начала изучения дисциплины
+    :param start_ty_period: ty_period начала изучения дисциплины
+    :param teach_year: нужный учебный год
+    :return: num of course
+    """
+    return start_crs + (teach_year - int(str(start_ty_period)[:-1]))
+
+
+def get_ty_periods(dss_id: int, dgr_periods: dict) -> list:
+    """
+    Список всех TY_PERIODS, в которые узучается DIS_STUDY
+    :param dss_id: id DIS_STUDY
+    :param dgr_periods: словарь с DGR_PERIODS
+    :return: [typ_id_1, ... , typ_id_N]
+    """
+    return [value.typ_typ_id for value in dgr_periods.values() if value.dss_dss_id == dss_id]
 
 
 def get_div_for_dgr(ty_id: int, bch_id: int, dis_id: int) -> int | None:
